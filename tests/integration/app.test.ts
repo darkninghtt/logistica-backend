@@ -1,14 +1,20 @@
 import express from 'express';
 import pino from 'pino';
 import request from 'supertest';
-import { describe, expect, it } from 'vitest';
-import { createApp } from '../../src/app';
+import { afterAll, describe, expect, it } from 'vitest';
 import { ConflictError } from '../../src/domain/errors';
 import { createHttpLogger } from '../../src/logger';
 import { errorHandler, notFoundHandler } from '../../src/middlewares/error-handler';
+import { buildTestApp } from '../helpers/app';
+import { createTestPool } from '../helpers/db';
 
 const logger = pino({ level: 'silent' });
-const app = createApp({ logger });
+const pool = createTestPool();
+const { app } = buildTestApp(pool);
+
+afterAll(async () => {
+  await pool.end();
+});
 
 describe('GET /health', () => {
   it('responde 200 con el estado', async () => {
