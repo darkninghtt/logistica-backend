@@ -7,7 +7,7 @@ Stack: Node.js 24 (LTS) · Express 5 · TypeScript estricto · Zod · pino · Vi
 ## Requisitos
 
 - Node.js 24 (ver `.nvmrc`)
-- PostgreSQL local (se usa desde la tarea J2; todavía no es necesario)
+- PostgreSQL 18 local (cualquier versión reciente sirve)
 
 ## Puesta en marcha
 
@@ -17,7 +17,27 @@ cp .env.example .env   # en PowerShell: Copy-Item .env.example .env
 npm run dev
 ```
 
-Comprobar: `GET http://localhost:3000/health` → `{ "status": "ok" }`.
+## Base de datos
+
+Una vez por máquina, crea el usuario y las bases de desarrollo y de pruebas con el superusuario de PostgreSQL:
+
+```bash
+psql -U postgres -h localhost -f scripts/setup-db.sql
+```
+
+Luego aplica las migraciones (`npm run migrate:up`). Las pruebas aplican las suyas solas sobre `TEST_DATABASE_URL`.
+
+Migraciones versionadas con `node-pg-migrate` en `migrations/` (archivos `.sql`). Nunca se edita una migración ya aplicada: se crea una nueva. Se ejecutan como paso de despliegue, no al arrancar la app.
+
+| Script                                          | Qué hace                                             |
+| ----------------------------------------------- | ---------------------------------------------------- |
+| `npm run migrate:up`                            | Aplica las migraciones pendientes (BD de desarrollo) |
+| `npm run migrate:down`                          | Revierte la última migración                         |
+| `npm run migrate:test:up` / `migrate:test:down` | Lo mismo sobre la BD de pruebas                      |
+
+## Comprobar que la API responde
+
+`GET http://localhost:3000/health` → `{ "status": "ok" }`.
 
 ## Scripts
 
