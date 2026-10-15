@@ -35,6 +35,16 @@ Migraciones versionadas con `node-pg-migrate` en `migrations/` (archivos `.sql`)
 | `npm run migrate:down`                          | Revierte la última migración                         |
 | `npm run migrate:test:up` / `migrate:test:down` | Lo mismo sobre la BD de pruebas                      |
 
+## Usuario ADMIN y login
+
+```bash
+npm run seed   # crea el ADMIN de desarrollo (datos en .env; es idempotente)
+```
+
+- `POST /api/auth/login` devuelve `{ accessToken, user }`. El token (JWT, 15 min) se envía como `Authorization: Bearer <token>`.
+- `GET /api/auth/me` devuelve el usuario del token. Todo `/api` exige token, salvo el login.
+- Contraseñas con Argon2id. Documentación interactiva en `http://localhost:3000/api-docs`.
+
 ## Comprobar que la API responde
 
 `GET http://localhost:3000/health` → `{ "status": "ok" }`.
@@ -46,6 +56,7 @@ Migraciones versionadas con `node-pg-migrate` en `migrations/` (archivos `.sql`)
 | `npm run dev`       | Arranca la API con recarga (lee `.env`)       |
 | `npm run build`     | Compila a `dist/`                             |
 | `npm start`         | Ejecuta lo compilado (`dist/main.js`)         |
+| `npm run seed`      | Crea el usuario ADMIN de desarrollo           |
 | `npm run lint`      | ESLint + comprobación de formato con Prettier |
 | `npm run format`    | Aplica Prettier                               |
 | `npm run typecheck` | `tsc --noEmit`                                |
