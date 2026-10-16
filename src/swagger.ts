@@ -177,6 +177,53 @@ export function buildOpenApiSpec(): object {
               stockLevel: { $ref: '#/components/schemas/StockLevel' },
             },
           },
+          StockLevelItem: {
+            allOf: [
+              { $ref: '#/components/schemas/StockLevel' },
+              {
+                type: 'object',
+                required: ['productSku', 'productName', 'productUnit'],
+                properties: {
+                  productSku: { type: 'string', example: 'SKU-001' },
+                  productName: { type: 'string', example: 'Tornillo 1/4' },
+                  productUnit: { type: 'string', example: 'un' },
+                },
+              },
+            ],
+          },
+          StockLevelPage: {
+            type: 'object',
+            required: ['data', 'page', 'pageSize', 'total'],
+            properties: {
+              data: { type: 'array', items: { $ref: '#/components/schemas/StockLevelItem' } },
+              page: { type: 'integer' },
+              pageSize: { type: 'integer' },
+              total: { type: 'integer' },
+            },
+          },
+          StockMovementItem: {
+            allOf: [
+              { $ref: '#/components/schemas/StockMovement' },
+              {
+                type: 'object',
+                required: ['productSku', 'productName'],
+                properties: {
+                  productSku: { type: 'string', example: 'SKU-001' },
+                  productName: { type: 'string', example: 'Tornillo 1/4' },
+                },
+              },
+            ],
+          },
+          StockMovementPage: {
+            type: 'object',
+            required: ['data', 'page', 'pageSize', 'total'],
+            properties: {
+              data: { type: 'array', items: { $ref: '#/components/schemas/StockMovementItem' } },
+              page: { type: 'integer' },
+              pageSize: { type: 'integer' },
+              total: { type: 'integer' },
+            },
+          },
           ErrorResponse: {
             type: 'object',
             required: ['code', 'message', 'correlationId'],

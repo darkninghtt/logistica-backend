@@ -4,6 +4,7 @@ import swaggerUi from 'swagger-ui-express';
 import { createAuthController } from './controllers/auth';
 import { createProductsController } from './controllers/products';
 import { createStockController } from './controllers/stock';
+import { createStockQueryController } from './controllers/stock-queries';
 import { createWarehousesController } from './controllers/warehouses';
 import { createHttpLogger } from './logger';
 import { createAuthenticate } from './middlewares/authenticate';
@@ -12,10 +13,12 @@ import { createAuthRouter } from './routes/auth';
 import { createHealthRouter } from './routes/health';
 import { createProductsRouter } from './routes/products';
 import { createStockRouter } from './routes/stock';
+import { createStockQueryRouter } from './routes/stock-queries';
 import { createWarehousesRouter } from './routes/warehouses';
 import type { AuthService, TokenService } from './services/auth';
 import type { ProductsService } from './services/products';
 import type { StockService } from './services/stock';
+import type { StockQueryService } from './services/stock-queries';
 import type { WarehousesService } from './services/warehouses';
 import { buildOpenApiSpec } from './swagger';
 
@@ -26,6 +29,7 @@ export interface AppDeps {
   warehousesService: WarehousesService;
   productsService: ProductsService;
   stockService: StockService;
+  stockQueryService: StockQueryService;
 }
 
 /** Arma la aplicación Express. Las dependencias llegan desde `main.ts` (única composición). */
@@ -36,6 +40,7 @@ export function createApp({
   warehousesService,
   productsService,
   stockService,
+  stockQueryService,
 }: AppDeps): Express {
   const app = express();
   const authenticate = createAuthenticate(tokens);
@@ -58,6 +63,7 @@ export function createApp({
   app.use('/api/warehouses', createWarehousesRouter(createWarehousesController(warehousesService)));
   app.use('/api/products', createProductsRouter(createProductsController(productsService)));
   app.use('/api/stock', createStockRouter(createStockController(stockService)));
+  app.use('/api/stock', createStockQueryRouter(createStockQueryController(stockQueryService)));
 
   app.use(notFoundHandler);
   app.use(errorHandler);
