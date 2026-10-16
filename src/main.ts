@@ -4,12 +4,14 @@ import { createPool, withTransaction } from './db';
 import { createLogger } from './logger';
 import { createProductsRepository } from './repositories/products';
 import { createStockRepository } from './repositories/stock';
+import { createStockQueryRepository } from './repositories/stock-queries';
 import { createUsersRepository } from './repositories/users';
 import { createWarehousesRepository } from './repositories/warehouses';
 import { createAuthService } from './services/auth';
 import { createArgon2Hasher } from './services/password-hasher';
 import { createProductsService } from './services/products';
 import { createStockService } from './services/stock';
+import { createStockQueryService } from './services/stock-queries';
 import { createTokenService } from './services/token-service';
 import { createWarehousesService } from './services/warehouses';
 
@@ -36,6 +38,7 @@ function main(): void {
     runInTransaction: (work) =>
       withTransaction(pool, (client) => work(createStockRepository(client))),
   });
+  const stockQueryService = createStockQueryService({ store: createStockQueryRepository(pool) });
   const app = createApp({
     logger,
     authService,
@@ -43,6 +46,7 @@ function main(): void {
     warehousesService,
     productsService,
     stockService,
+    stockQueryService,
   });
 
   app.listen(config.PORT, () => {

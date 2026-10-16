@@ -5,12 +5,14 @@ import { createApp } from '../../src/app';
 import { withTransaction } from '../../src/db';
 import { createProductsRepository } from '../../src/repositories/products';
 import { createStockRepository } from '../../src/repositories/stock';
+import { createStockQueryRepository } from '../../src/repositories/stock-queries';
 import { createUsersRepository } from '../../src/repositories/users';
 import { createWarehousesRepository } from '../../src/repositories/warehouses';
 import { createAuthService, type TokenService } from '../../src/services/auth';
 import { createArgon2Hasher } from '../../src/services/password-hasher';
 import { createProductsService } from '../../src/services/products';
 import { createStockService } from '../../src/services/stock';
+import { createStockQueryService } from '../../src/services/stock-queries';
 import { createTokenService } from '../../src/services/token-service';
 import { createUsersService } from '../../src/services/users';
 import { createWarehousesService } from '../../src/services/warehouses';
@@ -37,6 +39,7 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
     runInTransaction: (work) =>
       withTransaction(pool, (client) => work(createStockRepository(client))),
   });
+  const stockQueryService = createStockQueryService({ store: createStockQueryRepository(pool) });
   const app = createApp({
     logger: pino({ level: 'silent' }),
     authService,
@@ -44,6 +47,7 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
     warehousesService,
     productsService,
     stockService,
+    stockQueryService,
   });
   return { app, tokens };
 }
