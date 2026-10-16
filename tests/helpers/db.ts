@@ -42,5 +42,7 @@ export async function migrateTestDatabase(direction: 'up' | 'down'): Promise<voi
 
 /** Deja la BD de pruebas sin datos (las tablas se mantienen). */
 export async function truncateAll(pool: Pool): Promise<void> {
-  await pool.query('TRUNCATE users, warehouses, products');
+  await pool.query(
+    'TRUNCATE stock_movements, stock_levels, users, warehouses, products RESTART IDENTITY',
+  );
 }

@@ -1,13 +1,15 @@
 import { createApp } from './app';
 import { loadConfig } from './config';
-import { createPool } from './db';
+import { createPool, withTransaction } from './db';
 import { createLogger } from './logger';
 import { createProductsRepository } from './repositories/products';
+import { createStockRepository } from './repositories/stock';
 import { createUsersRepository } from './repositories/users';
 import { createWarehousesRepository } from './repositories/warehouses';
 import { createAuthService } from './services/auth';
 import { createArgon2Hasher } from './services/password-hasher';
 import { createProductsService } from './services/products';
+import { createStockService } from './services/stock';
 import { createTokenService } from './services/token-service';
 import { createWarehousesService } from './services/warehouses';
 
@@ -30,7 +32,18 @@ function main(): void {
     warehouses: createWarehousesRepository(pool),
   });
   const productsService = createProductsService({ products: createProductsRepository(pool) });
-  const app = createApp({ logger, authService, tokens, warehousesService, productsService });
+  const stockService = createStockService({
+    runInTransaction: (work) =>
+      withTransaction(pool, (client) => work(createStockRepository(client))),
+  });
+  const app = createApp({
+    logger,
+    authService,
+    tokens,
+    warehousesService,
+    productsService,
+    stockService,
+  });
 
   app.listen(config.PORT, () => {
     logger.info({ port: config.PORT, env: config.NODE_ENV }, 'Servidor escuchando');
