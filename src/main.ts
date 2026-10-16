@@ -3,9 +3,11 @@ import { loadConfig } from './config';
 import { createPool } from './db';
 import { createLogger } from './logger';
 import { createUsersRepository } from './repositories/users';
+import { createWarehousesRepository } from './repositories/warehouses';
 import { createAuthService } from './services/auth';
 import { createArgon2Hasher } from './services/password-hasher';
 import { createTokenService } from './services/token-service';
+import { createWarehousesService } from './services/warehouses';
 
 function main(): void {
   const config = loadConfig(process.env);
@@ -22,7 +24,10 @@ function main(): void {
     hasher: createArgon2Hasher(),
     tokens,
   });
-  const app = createApp({ logger, authService, tokens });
+  const warehousesService = createWarehousesService({
+    warehouses: createWarehousesRepository(pool),
+  });
+  const app = createApp({ logger, authService, tokens, warehousesService });
 
   app.listen(config.PORT, () => {
     logger.info({ port: config.PORT, env: config.NODE_ENV }, 'Servidor escuchando');

@@ -46,6 +46,36 @@ export function buildOpenApiSpec(): object {
               user: { $ref: '#/components/schemas/User' },
             },
           },
+          Warehouse: {
+            type: 'object',
+            required: ['id', 'code', 'name', 'active', 'createdAt'],
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              code: { type: 'string', example: 'BOD-A' },
+              name: { type: 'string', example: 'Bodega A' },
+              active: { type: 'boolean' },
+              createdAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          WarehouseInput: {
+            type: 'object',
+            required: ['code', 'name'],
+            properties: {
+              code: { type: 'string', maxLength: 20, example: 'BOD-A' },
+              name: { type: 'string', maxLength: 100, example: 'Bodega A' },
+              active: { type: 'boolean', default: true },
+            },
+          },
+          WarehousePage: {
+            type: 'object',
+            required: ['data', 'page', 'pageSize', 'total'],
+            properties: {
+              data: { type: 'array', items: { $ref: '#/components/schemas/Warehouse' } },
+              page: { type: 'integer' },
+              pageSize: { type: 'integer' },
+              total: { type: 'integer' },
+            },
+          },
           ErrorResponse: {
             type: 'object',
             required: ['code', 'message', 'correlationId'],
