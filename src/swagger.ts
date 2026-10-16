@@ -76,6 +76,36 @@ export function buildOpenApiSpec(): object {
               total: { type: 'integer' },
             },
           },
+          Product: {
+            type: 'object',
+            required: ['id', 'sku', 'name', 'unit', 'createdAt'],
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              sku: { type: 'string', example: 'SKU-001' },
+              name: { type: 'string', example: 'Tornillo 1/4' },
+              unit: { type: 'string', example: 'un' },
+              createdAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          ProductInput: {
+            type: 'object',
+            required: ['sku', 'name', 'unit'],
+            properties: {
+              sku: { type: 'string', maxLength: 40, example: 'SKU-001' },
+              name: { type: 'string', maxLength: 100, example: 'Tornillo 1/4' },
+              unit: { type: 'string', maxLength: 20, example: 'un' },
+            },
+          },
+          ProductPage: {
+            type: 'object',
+            required: ['data', 'page', 'pageSize', 'total'],
+            properties: {
+              data: { type: 'array', items: { $ref: '#/components/schemas/Product' } },
+              page: { type: 'integer' },
+              pageSize: { type: 'integer' },
+              total: { type: 'integer' },
+            },
+          },
           ErrorResponse: {
             type: 'object',
             required: ['code', 'message', 'correlationId'],

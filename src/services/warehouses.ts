@@ -1,6 +1,8 @@
 import { NotFoundError } from '../domain/errors';
-import type { Page, Warehouse } from '../domain/warehouse';
-import type { PageQuery, WarehouseInput } from '../schemas/warehouses';
+import type { Page } from '../domain/page';
+import type { Warehouse } from '../domain/warehouse';
+import type { PageQuery } from '../schemas/page';
+import type { WarehouseInput } from '../schemas/warehouses';
 
 /** Lo que el servicio necesita de la persistencia (la implementa el repositorio). */
 export interface WarehouseStore {

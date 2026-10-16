@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
+import { idParamSchema, pageQuerySchema } from '../schemas/page';
 import { parseWith } from '../schemas/parse';
-import { idParamSchema, pageQuerySchema, warehouseBodySchema } from '../schemas/warehouses';
+import { warehouseBodySchema } from '../schemas/warehouses';
 import type { WarehousesService } from '../services/warehouses';
 
 export interface WarehousesController {

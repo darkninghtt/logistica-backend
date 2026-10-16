@@ -2,10 +2,12 @@ import type { Express } from 'express';
 import type { Pool } from 'pg';
 import pino from 'pino';
 import { createApp } from '../../src/app';
+import { createProductsRepository } from '../../src/repositories/products';
 import { createUsersRepository } from '../../src/repositories/users';
 import { createWarehousesRepository } from '../../src/repositories/warehouses';
 import { createAuthService, type TokenService } from '../../src/services/auth';
 import { createArgon2Hasher } from '../../src/services/password-hasher';
+import { createProductsService } from '../../src/services/products';
 import { createTokenService } from '../../src/services/token-service';
 import { createUsersService } from '../../src/services/users';
 import { createWarehousesService } from '../../src/services/warehouses';
@@ -27,11 +29,13 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
   const warehousesService = createWarehousesService({
     warehouses: createWarehousesRepository(pool),
   });
+  const productsService = createProductsService({ products: createProductsRepository(pool) });
   const app = createApp({
     logger: pino({ level: 'silent' }),
     authService,
     tokens,
     warehousesService,
+    productsService,
   });
   return { app, tokens };
 }

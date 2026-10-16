@@ -2,10 +2,12 @@ import { createApp } from './app';
 import { loadConfig } from './config';
 import { createPool } from './db';
 import { createLogger } from './logger';
+import { createProductsRepository } from './repositories/products';
 import { createUsersRepository } from './repositories/users';
 import { createWarehousesRepository } from './repositories/warehouses';
 import { createAuthService } from './services/auth';
 import { createArgon2Hasher } from './services/password-hasher';
+import { createProductsService } from './services/products';
 import { createTokenService } from './services/token-service';
 import { createWarehousesService } from './services/warehouses';
 
@@ -27,7 +29,8 @@ function main(): void {
   const warehousesService = createWarehousesService({
     warehouses: createWarehousesRepository(pool),
   });
-  const app = createApp({ logger, authService, tokens, warehousesService });
+  const productsService = createProductsService({ products: createProductsRepository(pool) });
+  const app = createApp({ logger, authService, tokens, warehousesService, productsService });
 
   app.listen(config.PORT, () => {
     logger.info({ port: config.PORT, env: config.NODE_ENV }, 'Servidor escuchando');
