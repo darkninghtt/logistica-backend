@@ -106,6 +106,77 @@ export function buildOpenApiSpec(): object {
               total: { type: 'integer' },
             },
           },
+          StockEntryInput: {
+            type: 'object',
+            required: ['warehouseId', 'productId', 'quantity', 'unitCost'],
+            properties: {
+              warehouseId: { type: 'string', format: 'uuid' },
+              productId: { type: 'string', format: 'uuid' },
+              quantity: { type: 'integer', minimum: 1, maximum: 1000000000, example: 10 },
+              unitCost: {
+                type: 'string',
+                description: 'Costo unitario mayor que 0, con hasta 4 decimales (como texto)',
+                example: '100.0000',
+              },
+            },
+          },
+          StockLevel: {
+            type: 'object',
+            required: ['productId', 'warehouseId', 'quantity', 'avgCost', 'totalValue'],
+            properties: {
+              productId: { type: 'string', format: 'uuid' },
+              warehouseId: { type: 'string', format: 'uuid' },
+              quantity: { type: 'integer', example: 20 },
+              avgCost: {
+                type: 'string',
+                description: 'Costo promedio ponderado',
+                example: '110.0000',
+              },
+              totalValue: {
+                type: 'string',
+                description: 'quantity × avgCost',
+                example: '2200.0000',
+              },
+            },
+          },
+          StockMovement: {
+            type: 'object',
+            required: [
+              'id',
+              'productId',
+              'warehouseId',
+              'type',
+              'quantity',
+              'unitCost',
+              'balanceQty',
+              'balanceAvgCost',
+              'createdBy',
+              'createdAt',
+            ],
+            properties: {
+              id: { type: 'string', example: '1' },
+              productId: { type: 'string', format: 'uuid' },
+              warehouseId: { type: 'string', format: 'uuid' },
+              type: { type: 'string', enum: ['ENTRY'] },
+              quantity: { type: 'integer', example: 10 },
+              unitCost: { type: 'string', example: '120.0000' },
+              balanceQty: { type: 'integer', description: 'Saldo después del movimiento' },
+              balanceAvgCost: {
+                type: 'string',
+                description: 'Costo promedio después del movimiento',
+              },
+              createdBy: { type: 'string', format: 'uuid' },
+              createdAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          StockEntryResponse: {
+            type: 'object',
+            required: ['movement', 'stockLevel'],
+            properties: {
+              movement: { $ref: '#/components/schemas/StockMovement' },
+              stockLevel: { $ref: '#/components/schemas/StockLevel' },
+            },
+          },
           ErrorResponse: {
             type: 'object',
             required: ['code', 'message', 'correlationId'],
