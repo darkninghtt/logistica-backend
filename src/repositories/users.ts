@@ -7,6 +7,7 @@ interface UserRow {
   password_hash: string;
   name: string;
   role: string;
+  active: boolean;
 }
 
 export interface NewUser {
@@ -30,6 +31,7 @@ function toRecord(row: UserRow): UserRecord {
     passwordHash: row.password_hash,
     name: row.name,
     role: roleSchema.parse(row.role),
+    active: row.active,
   };
 }
 
@@ -38,7 +40,7 @@ export function createUsersRepository(db: Pool | PoolClient): UsersRepository {
   return {
     async findByEmail(email) {
       const { rows } = await db.query<UserRow>(
-        'SELECT id, email, password_hash, name, role FROM users WHERE lower(email) = lower($1)',
+        'SELECT id, email, password_hash, name, role, active FROM users WHERE lower(email) = lower($1)',
         [email],
       );
       const row = rows[0];
@@ -47,7 +49,7 @@ export function createUsersRepository(db: Pool | PoolClient): UsersRepository {
 
     async findById(id) {
       const { rows } = await db.query<UserRow>(
-        'SELECT id, email, password_hash, name, role FROM users WHERE id = $1',
+        'SELECT id, email, password_hash, name, role, active FROM users WHERE id = $1',
         [id],
       );
       const row = rows[0];

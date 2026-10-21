@@ -1,4 +1,4 @@
-import express, { type Express } from 'express';
+import express, { type Express, type RequestHandler } from 'express';
 import type { Logger } from 'pino';
 import swaggerUi from 'swagger-ui-express';
 import { createAuthController } from './controllers/auth';
@@ -7,6 +7,7 @@ import { createStockController } from './controllers/stock';
 import { createStockQueryController } from './controllers/stock-queries';
 import { createWarehousesController } from './controllers/warehouses';
 import { createHttpLogger } from './logger';
+import { createGeneralLimiter, createAuthLimiter, type RateLimits } from './middlewares/rate-limit';
 import { createFrontendHandlers } from './middlewares/frontend';
 import { createAuthenticate } from './middlewares/authenticate';
 import { errorHandler, notFoundHandler } from './middlewares/error-handler';
@@ -33,6 +34,10 @@ export interface AppDeps {
   stockQueryService: StockQueryService;
   /** Saltos de proxy de confianza (`trust proxy`); 0 si no hay proxy delante. */
   trustProxy?: number;
+  /** Rate limiting; si se omite no se limita (las pruebas lo activan cuando lo necesitan). */
+  rateLimits?: RateLimits;
+  /** `Secure` en la cookie del refresh (HTTPS). */
+  cookieSecure?: boolean;
   /** Carpeta con el build del frontend; si no existe o no tiene index.html, no se sirve. */
   publicDir?: string;
 }
@@ -47,6 +52,8 @@ export function createApp({
   stockService,
   stockQueryService,
   trustProxy = 0,
+  rateLimits,
+  cookieSecure = false,
   publicDir,
 }: AppDeps): Express {
   const app = express();
@@ -66,7 +73,19 @@ export function createApp({
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec));
 
   // /api: solo el login es público; el resto exige token
-  app.use('/api/auth', createAuthRouter(createAuthController(authService), authenticate));
+  const passThrough: RequestHandler = (_req, _res, next) => {
+    next();
+  };
+  if (rateLimits) app.use('/api', createGeneralLimiter(rateLimits.general));
+  const authLimiter = rateLimits ? createAuthLimiter(rateLimits.auth) : passThrough;
+  app.use(
+    '/api/auth',
+    createAuthRouter(
+      createAuthController(authService, { secure: cookieSecure }),
+      authenticate,
+      authLimiter,
+    ),
+  );
   app.use('/api', authenticate);
   app.use('/api/warehouses', createWarehousesRouter(createWarehousesController(warehousesService)));
   app.use('/api/products', createProductsRouter(createProductsController(productsService)));

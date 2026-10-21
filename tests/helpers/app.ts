@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import pino from 'pino';
 import { createApp, type AppDeps } from '../../src/app';
 import { withTransaction } from '../../src/db';
+import { createRefreshTokensRepository } from '../../src/repositories/refresh-tokens';
 import { createProductsRepository } from '../../src/repositories/products';
 import { createStockRepository } from '../../src/repositories/stock';
 import { createStockQueryRepository } from '../../src/repositories/stock-queries';
@@ -11,6 +12,7 @@ import { createWarehousesRepository } from '../../src/repositories/warehouses';
 import { createAuthService, type TokenService } from '../../src/services/auth';
 import { createArgon2Hasher } from '../../src/services/password-hasher';
 import { createProductsService } from '../../src/services/products';
+import { createSessionService } from '../../src/services/sessions';
 import { createStockService } from '../../src/services/stock';
 import { createStockQueryService } from '../../src/services/stock-queries';
 import { createTokenService } from '../../src/services/token-service';
@@ -32,7 +34,14 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
   const hasher = createArgon2Hasher();
   const users = createUsersRepository(pool);
   const tokens = createTokenService({ secret: TEST_JWT_SECRET, expiresInSeconds });
-  const authService = createAuthService({ users, hasher, tokens });
+  const sessions = createSessionService({
+    store: createRefreshTokensRepository(pool),
+    runInTransaction: (work) =>
+      withTransaction(pool, (client) => work(createRefreshTokensRepository(client))),
+    users,
+    ttlSeconds: 604800,
+  });
+  const authService = createAuthService({ users, hasher, tokens, sessions });
   const warehousesService = createWarehousesService({
     warehouses: createWarehousesRepository(pool),
   });

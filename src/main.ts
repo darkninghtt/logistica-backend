@@ -2,6 +2,7 @@ import { createApp } from './app';
 import { loadConfig } from './config';
 import { createPool, withTransaction } from './db';
 import { createLogger } from './logger';
+import { createRefreshTokensRepository } from './repositories/refresh-tokens';
 import { createProductsRepository } from './repositories/products';
 import { createStockRepository } from './repositories/stock';
 import { createStockQueryRepository } from './repositories/stock-queries';
@@ -10,6 +11,7 @@ import { createWarehousesRepository } from './repositories/warehouses';
 import { createAuthService } from './services/auth';
 import { createArgon2Hasher } from './services/password-hasher';
 import { createProductsService } from './services/products';
+import { createSessionService } from './services/sessions';
 import { createStockService } from './services/stock';
 import { createStockQueryService } from './services/stock-queries';
 import { createTokenService } from './services/token-service';
@@ -25,10 +27,19 @@ function main(): void {
     secret: config.JWT_SECRET,
     expiresInSeconds: config.JWT_ACCESS_TTL_SECONDS,
   });
+  const usersRepository = createUsersRepository(pool);
+  const sessions = createSessionService({
+    store: createRefreshTokensRepository(pool),
+    runInTransaction: (work) =>
+      withTransaction(pool, (client) => work(createRefreshTokensRepository(client))),
+    users: usersRepository,
+    ttlSeconds: config.REFRESH_TTL_SECONDS,
+  });
   const authService = createAuthService({
-    users: createUsersRepository(pool),
+    users: usersRepository,
     hasher: createArgon2Hasher(),
     tokens,
+    sessions,
   });
   const warehousesService = createWarehousesService({
     warehouses: createWarehousesRepository(pool),
@@ -48,6 +59,17 @@ function main(): void {
     stockService,
     stockQueryService,
     trustProxy: config.TRUST_PROXY,
+    cookieSecure: config.COOKIE_SECURE,
+    rateLimits: {
+      general: {
+        limit: config.RATE_LIMIT_GENERAL_MAX,
+        windowMs: config.RATE_LIMIT_GENERAL_WINDOW_SECONDS * 1000,
+      },
+      auth: {
+        limit: config.RATE_LIMIT_AUTH_MAX,
+        windowMs: config.RATE_LIMIT_AUTH_WINDOW_SECONDS * 1000,
+      },
+    },
     publicDir: config.PUBLIC_DIR,
   });
 

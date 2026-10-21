@@ -7,6 +7,7 @@ import {
   type TokenService,
   type UserLookup,
 } from '../../src/services/auth';
+import type { SessionService } from '../../src/services/sessions';
 
 const admin: UserRecord = {
   id: 'u-1',
@@ -14,6 +15,7 @@ const admin: UserRecord = {
   passwordHash: 'hash-correcto',
   name: 'Admin',
   role: 'ADMIN',
+  active: true,
 };
 
 function setup(user: UserRecord | null = admin) {
@@ -29,7 +31,21 @@ function setup(user: UserRecord | null = admin) {
     sign: vi.fn(() => 'token-firmado'),
     verify: vi.fn(() => ({ userId: 'u-1', role: 'ADMIN' as const })),
   };
-  return { users, hasher, tokens, service: createAuthService({ users, hasher, tokens }) };
+  const sessions: SessionService = {
+    start: vi.fn(async () => ({ token: 'refresh-nuevo', expiresAt: new Date(0) })),
+    rotate: vi.fn(async () => ({
+      user: admin,
+      refresh: { token: 'refresh-rotado', expiresAt: new Date(0) },
+    })),
+    end: vi.fn(async () => undefined),
+  };
+  return {
+    users,
+    hasher,
+    tokens,
+    sessions,
+    service: createAuthService({ users, hasher, tokens, sessions }),
+  };
 }
 
 describe('AuthService.login', () => {
@@ -94,5 +110,39 @@ describe('AuthService.me', () => {
   it('falla con UnauthorizedError si el usuario ya no existe', async () => {
     const { service } = setup(null);
     await expect(service.me('u-1')).rejects.toBeInstanceOf(UnauthorizedError);
+  });
+});
+
+describe('AuthService: sesión', () => {
+  it('login abre una sesión nueva y devuelve su refresh token', async () => {
+    const { service, sessions } = setup();
+    const result = await service.login('admin@example.com', 'buena');
+    expect(sessions.start).toHaveBeenCalledWith('u-1');
+    expect(result.refresh.token).toBe('refresh-nuevo');
+  });
+
+  it('un usuario desactivado no inicia sesión y recibe el mismo error que una contraseña mala', async () => {
+    const { service, sessions } = setup({ ...admin, active: false });
+    const inactive = await service.login('admin@example.com', 'buena').catch((e) => e);
+    const wrong = await setup()
+      .service.login('admin@example.com', 'mala')
+      .catch((e) => e);
+    expect(inactive).toBeInstanceOf(UnauthorizedError);
+    expect(inactive.message).toBe(wrong.message);
+    expect(sessions.start).not.toHaveBeenCalled();
+  });
+
+  it('refresh devuelve un access token nuevo y el refresh rotado', async () => {
+    const { service, sessions } = setup();
+    const result = await service.refresh('viejo');
+    expect(sessions.rotate).toHaveBeenCalledWith('viejo');
+    expect(result.accessToken).toBe('token-firmado');
+    expect(result.refresh.token).toBe('refresh-rotado');
+  });
+
+  it('logout revoca la sesión del refresh token', async () => {
+    const { service, sessions } = setup();
+    await service.logout('viejo');
+    expect(sessions.end).toHaveBeenCalledWith('viejo');
   });
 });

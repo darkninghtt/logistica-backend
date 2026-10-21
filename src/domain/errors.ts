@@ -1,5 +1,11 @@
 export type ErrorCode =
-  'VALIDATION_ERROR' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'NOT_FOUND' | 'CONFLICT' | 'INTERNAL_ERROR';
+  | 'VALIDATION_ERROR'
+  | 'UNAUTHORIZED'
+  | 'FORBIDDEN'
+  | 'NOT_FOUND'
+  | 'CONFLICT'
+  | 'TOO_MANY_REQUESTS'
+  | 'INTERNAL_ERROR';
 
 /** Error de dominio con código estable y estado HTTP. El middleware global lo traduce a la respuesta. */
 export class AppError extends Error {
@@ -34,6 +40,12 @@ export class ForbiddenError extends AppError {
 export class NotFoundError extends AppError {
   constructor(message = 'Recurso no encontrado') {
     super('NOT_FOUND', 404, message);
+  }
+}
+
+export class TooManyRequestsError extends AppError {
+  constructor(message = 'Demasiadas peticiones, intenta de nuevo más tarde') {
+    super('TOO_MANY_REQUESTS', 429, message);
   }
 }
 
