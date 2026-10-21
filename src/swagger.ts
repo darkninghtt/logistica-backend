@@ -236,6 +236,7 @@ export function buildOpenApiSpec(): object {
                   'FORBIDDEN',
                   'NOT_FOUND',
                   'CONFLICT',
+                  'TOO_MANY_REQUESTS',
                   'INTERNAL_ERROR',
                 ],
               },
