@@ -1,7 +1,7 @@
 import type { Express } from 'express';
 import type { Pool } from 'pg';
 import pino from 'pino';
-import { createApp } from '../../src/app';
+import { createApp, type AppDeps } from '../../src/app';
 import { withTransaction } from '../../src/db';
 import { createProductsRepository } from '../../src/repositories/products';
 import { createStockRepository } from '../../src/repositories/stock';
@@ -23,6 +23,8 @@ export const ADMIN = { email: 'admin@example.com', password: 'Clave-segura-123',
 export interface TestApp {
   app: Express;
   tokens: TokenService;
+  /** Dependencias con las que se armó la app (para volver a armarla con opciones extra). */
+  deps: AppDeps;
 }
 
 /** Compone la app real (mismas piezas que main.ts) contra la BD de pruebas. */
@@ -40,7 +42,7 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
       withTransaction(pool, (client) => work(createStockRepository(client))),
   });
   const stockQueryService = createStockQueryService({ store: createStockQueryRepository(pool) });
-  const app = createApp({
+  const deps: AppDeps = {
     logger: pino({ level: 'silent' }),
     authService,
     tokens,
@@ -48,8 +50,8 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
     productsService,
     stockService,
     stockQueryService,
-  });
-  return { app, tokens };
+  };
+  return { app: createApp(deps), tokens, deps };
 }
 
 /** Crea el ADMIN de pruebas (con la misma lógica del seed real). */

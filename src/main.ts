@@ -47,6 +47,8 @@ function main(): void {
     productsService,
     stockService,
     stockQueryService,
+    trustProxy: config.TRUST_PROXY,
+    publicDir: config.PUBLIC_DIR,
   });
 
   app.listen(config.PORT, () => {
