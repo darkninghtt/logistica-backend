@@ -10,6 +10,8 @@ describe('loadConfig', () => {
     expect(loadConfig({ ...BASE })).toEqual({
       NODE_ENV: 'development',
       PORT: 3000,
+      TRUST_PROXY: 0,
+      PUBLIC_DIR: 'public',
       LOG_LEVEL: 'info',
       DATABASE_URL: URL,
       JWT_SECRET: SECRET,
