@@ -7,6 +7,7 @@ import { createStockController } from './controllers/stock';
 import { createStockQueryController } from './controllers/stock-queries';
 import { createWarehousesController } from './controllers/warehouses';
 import { createHttpLogger } from './logger';
+import { createFrontendHandlers } from './middlewares/frontend';
 import { createAuthenticate } from './middlewares/authenticate';
 import { errorHandler, notFoundHandler } from './middlewares/error-handler';
 import { createAuthRouter } from './routes/auth';
@@ -30,6 +31,10 @@ export interface AppDeps {
   productsService: ProductsService;
   stockService: StockService;
   stockQueryService: StockQueryService;
+  /** Saltos de proxy de confianza (`trust proxy`); 0 si no hay proxy delante. */
+  trustProxy?: number;
+  /** Carpeta con el build del frontend; si no existe o no tiene index.html, no se sirve. */
+  publicDir?: string;
 }
 
 /** Arma la aplicación Express. Las dependencias llegan desde `main.ts` (única composición). */
@@ -41,12 +46,15 @@ export function createApp({
   productsService,
   stockService,
   stockQueryService,
+  trustProxy = 0,
+  publicDir,
 }: AppDeps): Express {
   const app = express();
   const authenticate = createAuthenticate(tokens);
   const openApiSpec = buildOpenApiSpec();
 
   app.disable('x-powered-by');
+  if (trustProxy > 0) app.set('trust proxy', trustProxy);
   app.use(createHttpLogger(logger));
   app.use(express.json());
 
@@ -64,6 +72,10 @@ export function createApp({
   app.use('/api/products', createProductsRouter(createProductsController(productsService)));
   app.use('/api/stock', createStockRouter(createStockController(stockService)));
   app.use('/api/stock', createStockQueryRouter(createStockQueryController(stockQueryService)));
+
+  // Frontend (un solo origen): archivos estáticos y fallback al router de Vue
+  const frontend = publicDir === undefined ? null : createFrontendHandlers(publicDir);
+  if (frontend) app.use(frontend);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
