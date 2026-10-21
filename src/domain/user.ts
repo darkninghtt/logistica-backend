@@ -11,6 +11,8 @@ export interface UserRecord {
   passwordHash: string;
   name: string;
   role: Role;
+  /** Un usuario desactivado no puede iniciar sesión ni renovar la sesión. */
+  active: boolean;
 }
 
 /** Datos del usuario que sí pueden viajar al cliente. */
