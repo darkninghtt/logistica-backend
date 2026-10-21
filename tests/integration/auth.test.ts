@@ -137,6 +137,7 @@ describe('protección de /api', () => {
 
   it('un token válido de un usuario que ya no existe da 401', async () => {
     const token = await loginAsAdmin();
+    await pool.query('DELETE FROM refresh_tokens');
     await pool.query('DELETE FROM users');
     const res = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(401);
