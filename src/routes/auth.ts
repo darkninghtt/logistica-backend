@@ -105,11 +105,11 @@ import type { AuthController } from '../controllers/auth';
 export function createAuthRouter(
   controller: AuthController,
   authenticate: RequestHandler,
-  authLimiter: RequestHandler,
+  limiters: { login: RequestHandler; refresh: RequestHandler },
 ): Router {
   const router = Router();
-  router.post('/login', authLimiter, controller.login);
-  router.post('/refresh', authLimiter, controller.refresh);
+  router.post('/login', limiters.login, controller.login);
+  router.post('/refresh', limiters.refresh, controller.refresh);
   router.post('/logout', controller.logout);
   router.get('/me', authenticate, controller.me);
   return router;
