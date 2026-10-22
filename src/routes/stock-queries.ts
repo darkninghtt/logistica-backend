@@ -7,6 +7,7 @@ import type { StockQueryController } from '../controllers/stock-queries';
  *   get:
  *     tags: [Stock]
  *     summary: Existencias de una bodega (cantidad, costo promedio y valor total por producto)
+ *     description: ADMIN y AUDITOR consultan cualquier bodega; WAREHOUSE_MANAGER y OPERATOR, solo las asignadas. El OPERATOR no recibe los campos de costo (`avgCost`, `totalValue`).
  *     parameters:
  *       - in: query
  *         name: warehouseId
@@ -37,6 +38,12 @@ import type { StockQueryController } from '../controllers/stock-queries';
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: La bodega no está entre las asignadas al usuario (ADMIN y AUDITOR consultan cualquiera)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
  *         description: La bodega no existe
  *         content:
@@ -47,6 +54,7 @@ import type { StockQueryController } from '../controllers/stock-queries';
  *   get:
  *     tags: [Stock]
  *     summary: Historial de movimientos de una bodega, con el saldo y el costo después de cada uno
+ *     description: Mismo alcance que las existencias. El OPERATOR no recibe los campos de costo (`unitCost`, `balanceAvgCost`).
  *     parameters:
  *       - in: query
  *         name: warehouseId
@@ -77,6 +85,12 @@ import type { StockQueryController } from '../controllers/stock-queries';
  *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
  *         description: Token ausente, inválido o expirado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: La bodega no está entre las asignadas al usuario (ADMIN y AUDITOR consultan cualquiera)
  *         content:
  *           application/json:
  *             schema:

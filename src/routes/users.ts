@@ -1,14 +1,6 @@
-import { Router, type RequestHandler } from 'express';
+import { Router } from 'express';
 import type { UsersController } from '../controllers/users';
-import { ForbiddenError } from '../domain/errors';
-
-/**
- * TEMPORAL (H1): control de rol mínimo mientras llega `requireRole` (H2). Al integrar H2 se
- * reemplaza por `requireRole('ADMIN')` y esto se borra.
- */
-const onlyAdmin: RequestHandler = (req, _res, next) => {
-  next(req.auth?.role === 'ADMIN' ? undefined : new ForbiddenError());
-};
+import { requireRole } from '../middlewares/require-role';
 
 /**
  * @openapi
@@ -190,7 +182,7 @@ const onlyAdmin: RequestHandler = (req, _res, next) => {
  */
 export function createUsersRouter(controller: UsersController): Router {
   const router = Router();
-  router.use(onlyAdmin);
+  router.use(requireRole('ADMIN'));
   router.get('/', controller.list);
   router.post('/', controller.create);
   router.put('/:id', controller.update);

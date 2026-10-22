@@ -4,7 +4,9 @@ import {
   type StockLevel,
   type StockMovement,
 } from '../domain/stock';
+import { assertRole, type Actor } from '../domain/authorization';
 import type { StockEntryInput } from '../schemas/stock';
+import type { WarehouseAccess } from './warehouse-access';
 
 /** Datos de un movimiento nuevo (el libro le pone id y fecha). */
 export interface NewMovement {
@@ -37,17 +39,23 @@ export interface StockEntryResult {
 }
 
 export interface StockService {
-  registerEntry(input: StockEntryInput, userId: string): Promise<StockEntryResult>;
+  registerEntry(input: StockEntryInput, actor: Actor): Promise<StockEntryResult>;
 }
 
 export interface StockDeps {
   /** Abre una transacción y entrega el almacén ligado a ella (COMMIT si termina, ROLLBACK si falla). */
   runInTransaction<T>(work: (store: StockStore) => Promise<T>): Promise<T>;
+  access: WarehouseAccess;
 }
 
-export function createStockService({ runInTransaction }: StockDeps): StockService {
+/** Quién puede registrar entradas: el ADMIN en cualquier bodega, el jefe solo en las suyas. */
+const ENTRY_ROLES = ['ADMIN', 'WAREHOUSE_MANAGER'] as const;
+
+export function createStockService({ runInTransaction, access }: StockDeps): StockService {
   return {
-    registerEntry(input, userId) {
+    async registerEntry(input, actor) {
+      assertRole(actor, ENTRY_ROLES);
+      await access.assert(actor, input.warehouseId);
       return runInTransaction(async (store) => {
         const { productId, warehouseId } = input;
         await store.ensureLevel(productId, warehouseId);
@@ -63,7 +71,7 @@ export function createStockService({ runInTransaction }: StockDeps): StockServic
           unitCost: input.unitCost,
           balanceQty: next.quantity,
           balanceAvgCost: next.avgCost,
-          createdBy: userId,
+          createdBy: actor.userId,
         });
         return { movement, stockLevel };
       });

@@ -1,3 +1,4 @@
+import { assertRole, type Actor } from '../domain/authorization';
 import { NotFoundError } from '../domain/errors';
 import type { Page } from '../domain/page';
 import type { Product } from '../domain/product';
@@ -15,8 +16,10 @@ export interface ProductStore {
 
 export interface ProductsService {
   list(query: PageQuery): Promise<Page<Product>>;
-  create(input: ProductInput): Promise<Product>;
-  update(id: string, input: ProductInput): Promise<Product>;
+  /** Solo el ADMIN. */
+  create(input: ProductInput, actor: Actor): Promise<Product>;
+  /** Solo el ADMIN. */
+  update(id: string, input: ProductInput, actor: Actor): Promise<Product>;
 }
 
 export function createProductsService({ products }: { products: ProductStore }): ProductsService {
@@ -26,11 +29,13 @@ export function createProductsService({ products }: { products: ProductStore }):
       return { data: rows, page, pageSize, total };
     },
 
-    create(input) {
+    async create(input, actor) {
+      assertRole(actor, ['ADMIN']);
       return products.insert(input);
     },
 
-    async update(id, input) {
+    async update(id, input, actor) {
+      assertRole(actor, ['ADMIN']);
       const updated = await products.update(id, input);
       if (!updated) {
         throw new NotFoundError('El producto no existe');
