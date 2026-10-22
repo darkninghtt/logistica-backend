@@ -26,3 +26,10 @@ export interface PublicUser {
 export function toPublicUser(user: UserRecord): PublicUser {
   return { id: user.id, name: user.name, email: user.email, role: user.role };
 }
+
+/** Usuario tal como lo ve el ADMIN al gestionarlos: sin hash y con sus bodegas asignadas. */
+export interface ManagedUser extends PublicUser {
+  active: boolean;
+  warehouseIds: string[];
+  createdAt: string;
+}
