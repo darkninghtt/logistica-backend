@@ -51,6 +51,8 @@ export interface UsersRepository {
   update(id: string, changes: UserChanges): Promise<ManagedUser | null>;
   /** Reemplaza las bodegas asignadas en una sola instrucción. Una bodega inexistente lanza NotFoundError. */
   replaceWarehouses(userId: string, warehouseIds: string[]): Promise<void>;
+  /** Ids de las bodegas asignadas al usuario. */
+  warehouseIdsOf(userId: string): Promise<string[]>;
   /** Agrega bodegas sin quitar las que ya tiene (lo usa el seed). */
   addWarehouses(userId: string, warehouseIds: string[]): Promise<void>;
 }
@@ -200,6 +202,14 @@ export function createUsersRepository(db: Pool | PoolClient): UsersRepository {
           ? new NotFoundError('Alguna de las bodegas no existe')
           : err;
       }
+    },
+
+    async warehouseIdsOf(userId) {
+      const { rows } = await db.query<{ warehouse_id: string }>(
+        'SELECT warehouse_id FROM user_warehouses WHERE user_id = $1',
+        [userId],
+      );
+      return rows.map((row) => row.warehouse_id);
     },
 
     async addWarehouses(userId, warehouseIds) {
