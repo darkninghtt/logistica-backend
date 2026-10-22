@@ -5,6 +5,7 @@ import { createAuthController, readCookie, REFRESH_COOKIE } from './controllers/
 import { createProductsController } from './controllers/products';
 import { createStockController } from './controllers/stock';
 import { createStockQueryController } from './controllers/stock-queries';
+import { createUsersController } from './controllers/users';
 import { createWarehousesController } from './controllers/warehouses';
 import { createHttpLogger } from './logger';
 import { createGeneralLimiter, createAuthLimiter, type RateLimits } from './middlewares/rate-limit';
@@ -16,11 +17,13 @@ import { createHealthRouter } from './routes/health';
 import { createProductsRouter } from './routes/products';
 import { createStockRouter } from './routes/stock';
 import { createStockQueryRouter } from './routes/stock-queries';
+import { createUsersRouter } from './routes/users';
 import { createWarehousesRouter } from './routes/warehouses';
 import type { AuthService, TokenService } from './services/auth';
 import type { ProductsService } from './services/products';
 import type { StockService } from './services/stock';
 import type { StockQueryService } from './services/stock-queries';
+import type { UserManagementService } from './services/user-management';
 import type { WarehousesService } from './services/warehouses';
 import { buildOpenApiSpec } from './swagger';
 
@@ -32,6 +35,7 @@ export interface AppDeps {
   productsService: ProductsService;
   stockService: StockService;
   stockQueryService: StockQueryService;
+  userManagementService: UserManagementService;
   /** Saltos de proxy de confianza (`trust proxy`); 0 si no hay proxy delante. */
   trustProxy?: number;
   /** Rate limiting; si se omite no se limita (las pruebas lo activan cuando lo necesitan). */
@@ -51,6 +55,7 @@ export function createApp({
   productsService,
   stockService,
   stockQueryService,
+  userManagementService,
   trustProxy = 0,
   rateLimits,
   cookieSecure = false,
@@ -94,6 +99,7 @@ export function createApp({
     }),
   );
   app.use('/api', authenticate);
+  app.use('/api/users', createUsersRouter(createUsersController(userManagementService)));
   app.use('/api/warehouses', createWarehousesRouter(createWarehousesController(warehousesService)));
   app.use('/api/products', createProductsRouter(createProductsController(productsService)));
   app.use('/api/stock', createStockRouter(createStockController(stockService)));

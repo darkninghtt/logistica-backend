@@ -46,6 +46,76 @@ export function buildOpenApiSpec(): object {
               user: { $ref: '#/components/schemas/User' },
             },
           },
+          ManagedUser: {
+            type: 'object',
+            required: ['id', 'name', 'email', 'role', 'active', 'warehouseIds', 'createdAt'],
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              name: { type: 'string' },
+              email: { type: 'string', format: 'email' },
+              role: { type: 'string', enum: [...ROLES] },
+              active: { type: 'boolean' },
+              warehouseIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+              createdAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          UserCreateInput: {
+            type: 'object',
+            required: ['email', 'name', 'role', 'password'],
+            properties: {
+              email: { type: 'string', format: 'email', example: 'jefe@logistica.local' },
+              name: { type: 'string', maxLength: 100, example: 'Jefe de bodega' },
+              role: { type: 'string', enum: [...ROLES] },
+              password: {
+                type: 'string',
+                minLength: 12,
+                maxLength: 128,
+                description: 'Contraseña inicial',
+              },
+              active: { type: 'boolean', default: true },
+            },
+          },
+          UserUpdateInput: {
+            type: 'object',
+            required: ['email', 'name', 'role', 'active'],
+            properties: {
+              email: { type: 'string', format: 'email' },
+              name: { type: 'string', maxLength: 100 },
+              role: { type: 'string', enum: [...ROLES] },
+              password: {
+                type: 'string',
+                minLength: 12,
+                maxLength: 128,
+                description: 'Opcional: solo cambia si se envía',
+              },
+              active: { type: 'boolean' },
+            },
+          },
+          ManagedUserPage: {
+            type: 'object',
+            required: ['data', 'page', 'pageSize', 'total'],
+            properties: {
+              data: { type: 'array', items: { $ref: '#/components/schemas/ManagedUser' } },
+              page: { type: 'integer' },
+              pageSize: { type: 'integer' },
+              total: { type: 'integer' },
+            },
+          },
+          UserWarehousesInput: {
+            type: 'object',
+            required: ['warehouseIds'],
+            properties: {
+              warehouseIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+            },
+          },
+          UserWarehouses: {
+            type: 'object',
+            required: ['userId', 'warehouseIds'],
+            properties: {
+              userId: { type: 'string', format: 'uuid' },
+              warehouseIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+            },
+          },
           Warehouse: {
             type: 'object',
             required: ['id', 'code', 'name', 'active', 'createdAt'],

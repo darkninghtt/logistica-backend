@@ -16,6 +16,7 @@ import { createSessionService } from '../../src/services/sessions';
 import { createStockService } from '../../src/services/stock';
 import { createStockQueryService } from '../../src/services/stock-queries';
 import { createTokenService } from '../../src/services/token-service';
+import { createUserManagementService } from '../../src/services/user-management';
 import { createUsersService } from '../../src/services/users';
 import { createWarehousesService } from '../../src/services/warehouses';
 
@@ -51,6 +52,7 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
       withTransaction(pool, (client) => work(createStockRepository(client))),
   });
   const stockQueryService = createStockQueryService({ store: createStockQueryRepository(pool) });
+  const userManagementService = createUserManagementService({ users, hasher });
   const deps: AppDeps = {
     logger: pino({ level: 'silent' }),
     authService,
@@ -59,6 +61,7 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
     productsService,
     stockService,
     stockQueryService,
+    userManagementService,
   };
   return { app: createApp(deps), tokens, deps };
 }

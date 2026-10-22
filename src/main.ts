@@ -15,6 +15,7 @@ import { createSessionService } from './services/sessions';
 import { createStockService } from './services/stock';
 import { createStockQueryService } from './services/stock-queries';
 import { createTokenService } from './services/token-service';
+import { createUserManagementService } from './services/user-management';
 import { createWarehousesService } from './services/warehouses';
 
 function main(): void {
@@ -50,6 +51,10 @@ function main(): void {
       withTransaction(pool, (client) => work(createStockRepository(client))),
   });
   const stockQueryService = createStockQueryService({ store: createStockQueryRepository(pool) });
+  const userManagementService = createUserManagementService({
+    users: usersRepository,
+    hasher: createArgon2Hasher(),
+  });
   const app = createApp({
     logger,
     authService,
@@ -58,6 +63,7 @@ function main(): void {
     productsService,
     stockService,
     stockQueryService,
+    userManagementService,
     trustProxy: config.TRUST_PROXY,
     cookieSecure: config.COOKIE_SECURE,
     rateLimits: {
