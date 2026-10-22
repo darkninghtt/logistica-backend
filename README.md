@@ -38,8 +38,12 @@ Migraciones versionadas con `node-pg-migrate` en `migrations/` (archivos `.sql`)
 ## Usuario ADMIN y login
 
 ```bash
-npm run seed   # crea el ADMIN de desarrollo (datos en .env; es idempotente)
+npm run seed   # crea el ADMIN y los usuarios de demo de .env (es idempotente)
 ```
+
+El seed crea el ADMIN y, si sus variables están definidas (`SEED_MANAGER_*`, `SEED_OPERATOR_*`, `SEED_AUDITOR_*`), un jefe de bodega, un operario y un auditor, con las bodegas de ejemplo `BOD-A` y `BOD-B` (el jefe y el operario quedan asignados a `BOD-A`). Con `NODE_ENV=production` rechaza las contraseñas de desarrollo de `.env.example`: en la nube hay que definir contraseñas propias en las variables de entorno.
+
+El ADMIN gestiona usuarios por la API (Swagger, etiqueta _Usuarios_): `GET`/`POST /api/users`, `PUT /api/users/:id` (editar, activar o desactivar) y `PUT /api/users/:id/warehouses` (reemplaza las bodegas asignadas). Nunca se devuelve el hash de la contraseña.
 
 - `POST /api/auth/login` devuelve `{ accessToken, user }`. El token (JWT, 15 min) se envía como `Authorization: Bearer <token>`. Además fija la cookie `refresh_token` (`HttpOnly`, `SameSite=Strict`, `Path=/api/auth`, `Secure` en producción).
 - `POST /api/auth/refresh` (usa la cookie) devuelve un access token nuevo y rota la cookie; reutilizar un refresh ya rotado revoca toda la sesión. `POST /api/auth/logout` revoca la sesión y borra la cookie. En BD solo se guarda el hash del refresh token.
@@ -94,7 +98,7 @@ El backend sirve el build del frontend (`public/`) y la API bajo `/api`, todo de
 | `npm run dev`       | Arranca la API con recarga (lee `.env`)       |
 | `npm run build`     | Compila a `dist/`                             |
 | `npm start`         | Ejecuta lo compilado (`dist/main.js`)         |
-| `npm run seed`      | Crea el usuario ADMIN de desarrollo           |
+| `npm run seed`      | Crea el ADMIN y los usuarios de demo          |
 | `npm run lint`      | ESLint + comprobación de formato con Prettier |
 | `npm run format`    | Aplica Prettier                               |
 | `npm run typecheck` | `tsc --noEmit`                                |
