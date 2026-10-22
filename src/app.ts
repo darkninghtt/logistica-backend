@@ -1,7 +1,7 @@
 import express, { type Express, type RequestHandler } from 'express';
 import type { Logger } from 'pino';
 import swaggerUi from 'swagger-ui-express';
-import { createAuthController } from './controllers/auth';
+import { createAuthController, readCookie, REFRESH_COOKIE } from './controllers/auth';
 import { createProductsController } from './controllers/products';
 import { createStockController } from './controllers/stock';
 import { createStockQueryController } from './controllers/stock-queries';
@@ -77,14 +77,21 @@ export function createApp({
     next();
   };
   if (rateLimits) app.use('/api', createGeneralLimiter(rateLimits.general));
-  const authLimiter = rateLimits ? createAuthLimiter(rateLimits.auth) : passThrough;
+  // Login y refresh cuentan por separado. Un refresh sin cookie (quien abre la página sin sesión)
+  // no se cuenta: no hay token que adivinar y, si no, bloquearía a quien luego inicia sesión.
+  const loginLimiter = rateLimits ? createAuthLimiter(rateLimits.auth) : passThrough;
+  const refreshLimiter = rateLimits
+    ? createAuthLimiter(
+        rateLimits.auth,
+        (req) => readCookie(req.headers.cookie, REFRESH_COOKIE) === undefined,
+      )
+    : passThrough;
   app.use(
     '/api/auth',
-    createAuthRouter(
-      createAuthController(authService, { secure: cookieSecure }),
-      authenticate,
-      authLimiter,
-    ),
+    createAuthRouter(createAuthController(authService, { secure: cookieSecure }), authenticate, {
+      login: loginLimiter,
+      refresh: refreshLimiter,
+    }),
   );
   app.use('/api', authenticate);
   app.use('/api/warehouses', createWarehousesRouter(createWarehousesController(warehousesService)));

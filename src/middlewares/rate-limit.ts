@@ -1,4 +1,4 @@
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler } from 'express';
 import { rateLimit } from 'express-rate-limit';
 import { TooManyRequestsError } from '../domain/errors';
 
@@ -14,13 +14,18 @@ export interface RateLimits {
   auth: LimitConfig;
 }
 
-function build({ windowMs, limit }: LimitConfig, skipSuccessfulRequests: boolean): RequestHandler {
+function build(
+  { windowMs, limit }: LimitConfig,
+  skipSuccessfulRequests: boolean,
+  skip?: (req: Request) => boolean,
+): RequestHandler {
   return rateLimit({
     windowMs,
     limit,
     standardHeaders: 'draft-7',
     legacyHeaders: false,
     skipSuccessfulRequests,
+    skip,
     // El 429 pasa por el middleware global de errores para tener el formato uniforme
     handler: (_req, _res, next) => {
       next(new TooManyRequestsError());
@@ -35,8 +40,12 @@ export function createGeneralLimiter(config: LimitConfig): RequestHandler {
 
 /**
  * Para login y refresh: solo cuentan los intentos fallidos (4xx). Es lo que frena la fuerza bruta
- * sin bloquear a quien inicia sesión o recarga la página con normalidad.
+ * sin bloquear a quien inicia sesión o recarga la página con normalidad. `skip` permite no contar
+ * las peticiones que no pueden ser un ataque (por ejemplo, un refresh sin cookie).
  */
-export function createAuthLimiter(config: LimitConfig): RequestHandler {
-  return build(config, true);
+export function createAuthLimiter(
+  config: LimitConfig,
+  skip?: (req: Request) => boolean,
+): RequestHandler {
+  return build(config, true, skip);
 }

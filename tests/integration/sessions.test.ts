@@ -188,12 +188,42 @@ describe('rate limiting', () => {
     });
   });
 
-  it('el refresh también tiene el límite estricto', async () => {
+  it('el refresh también tiene el límite estricto cuando llega con una cookie inválida', async () => {
     const limited = createApp({ ...base.deps, rateLimits: limits });
+    const attempt = () =>
+      request(limited).post('/api/auth/refresh').set('Cookie', 'refresh_token=inventado');
     for (let i = 0; i < 3; i++) {
+      expect((await attempt()).status).toBe(401);
+    }
+    expect((await attempt()).status).toBe(429);
+  });
+
+  it('un refresh sin cookie no gasta el límite (abrir la página sin sesión no bloquea)', async () => {
+    const limited = createApp({ ...base.deps, rateLimits: limits });
+    for (let i = 0; i < 6; i++) {
       expect((await request(limited).post('/api/auth/refresh')).status).toBe(401);
     }
-    expect((await request(limited).post('/api/auth/refresh')).status).toBe(429);
+    const login = await request(limited)
+      .post('/api/auth/login')
+      .send({ email: ADMIN.email, password: ADMIN.password });
+    const token = login.headers['set-cookie']?.[0]?.split(';')[0]?.slice('refresh_token='.length);
+    const res = await request(limited)
+      .post('/api/auth/refresh')
+      .set('Cookie', `refresh_token=${token}`);
+    expect(res.status).toBe(200);
+  });
+
+  it('los fallos de login no gastan el límite del refresh', async () => {
+    const limited = createApp({ ...base.deps, rateLimits: limits });
+    for (let i = 0; i < 3; i++) {
+      await request(limited)
+        .post('/api/auth/login')
+        .send({ email: ADMIN.email, password: 'incorrecta' });
+    }
+    const res = await request(limited)
+      .post('/api/auth/refresh')
+      .set('Cookie', 'refresh_token=inventado');
+    expect(res.status).toBe(401);
   });
 
   it('los inicios de sesión correctos no gastan el límite estricto', async () => {
