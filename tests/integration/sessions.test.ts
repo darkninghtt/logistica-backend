@@ -168,6 +168,7 @@ describe('rate limiting', () => {
   const limits = {
     general: { limit: 1000, windowMs: 60_000 },
     auth: { limit: 3, windowMs: 60_000 },
+    refresh: { limit: 3, windowMs: 60_000 },
   };
 
   it('superar los intentos fallidos de login da 429 con el formato de error uniforme', async () => {
@@ -239,7 +240,11 @@ describe('rate limiting', () => {
   it('el límite general cuenta todas las peticiones a /api', async () => {
     const limited = createApp({
       ...base.deps,
-      rateLimits: { general: { limit: 3, windowMs: 60_000 }, auth: limits.auth },
+      rateLimits: {
+        general: { limit: 3, windowMs: 60_000 },
+        auth: limits.auth,
+        refresh: limits.refresh,
+      },
     });
     for (let i = 0; i < 3; i++) {
       expect((await request(limited).get('/api/warehouses')).status).toBe(401);
@@ -252,7 +257,11 @@ describe('rate limiting', () => {
   it('no limita /health', async () => {
     const limited = createApp({
       ...base.deps,
-      rateLimits: { general: { limit: 1, windowMs: 60_000 }, auth: limits.auth },
+      rateLimits: {
+        general: { limit: 1, windowMs: 60_000 },
+        auth: limits.auth,
+        refresh: limits.refresh,
+      },
     });
     for (let i = 0; i < 4; i++) {
       expect((await request(limited).get('/health')).status).toBe(200);

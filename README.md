@@ -47,7 +47,7 @@ El ADMIN gestiona usuarios por la API (Swagger, etiqueta _Usuarios_): `GET`/`POS
 
 - `POST /api/auth/login` devuelve `{ accessToken, user }`. El token (JWT, 15 min) se envía como `Authorization: Bearer <token>`. Además fija la cookie `refresh_token` (`HttpOnly`, `SameSite=Strict`, `Path=/api/auth`, `Secure` en producción).
 - `POST /api/auth/refresh` (usa la cookie) devuelve un access token nuevo y rota la cookie; reutilizar un refresh ya rotado revoca toda la sesión. `POST /api/auth/logout` revoca la sesión y borra la cookie. En BD solo se guarda el hash del refresh token.
-- Rate limiting por IP: 300 peticiones por minuto sobre `/api` y 10 intentos fallidos por 15 minutos en login y refresh (responde `429`). Se configura con las variables `RATE_LIMIT_*` de `.env.example`.
+- Rate limiting por IP: 300 peticiones por minuto sobre `/api` y 10 intentos fallidos por 15 minutos en login y 60 en refresh (responde `429`). Se configura con las variables `RATE_LIMIT_*` de `.env.example`.
 - `GET /api/auth/me` devuelve el usuario del token. Todo `/api` exige token, salvo el login.
 - Contraseñas con Argon2id. Documentación interactiva en `http://localhost:3000/api-docs`.
 
