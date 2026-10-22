@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { NotFoundError } from '../../src/domain/errors';
 import type { StockLevelItem, StockMovementItem } from '../../src/domain/stock-queries';
 import { createStockQueryService, type StockQueryStore } from '../../src/services/stock-queries';
+import { ADMIN_ACTOR, allowAllAccess } from '../helpers/actors';
 
 const WAREHOUSE = '0b0f1f5e-4f4e-4c3a-9a55-0d6f3d0f6a11';
 const PRODUCT = '7c1d2e3f-5a6b-4c7d-8e9f-0a1b2c3d4e5f';
@@ -45,11 +46,10 @@ function fakeStore(overrides: Partial<StockQueryStore> = {}): StockQueryStore {
 describe('StockQueryService.listLevels', () => {
   it('calcula el desplazamiento y devuelve el formato de lista', async () => {
     const store = fakeStore();
-    const result = await createStockQueryService({ store }).listLevels({
-      warehouseId: WAREHOUSE,
-      page: 3,
-      pageSize: 20,
-    });
+    const result = await createStockQueryService({ store, access: allowAllAccess }).listLevels(
+      { warehouseId: WAREHOUSE, page: 3, pageSize: 20 },
+      ADMIN_ACTOR,
+    );
 
     expect(store.listLevels).toHaveBeenCalledWith(WAREHOUSE, 20, 40);
     expect(result).toEqual({ data: [level], page: 3, pageSize: 20, total: 41 });
@@ -57,10 +57,10 @@ describe('StockQueryService.listLevels', () => {
 
   it('lanza NotFoundError si la bodega no existe y no consulta los niveles', async () => {
     const store = fakeStore({ warehouseExists: vi.fn(async () => false) });
-    const service = createStockQueryService({ store });
+    const service = createStockQueryService({ store, access: allowAllAccess });
 
     await expect(
-      service.listLevels({ warehouseId: WAREHOUSE, page: 1, pageSize: 20 }),
+      service.listLevels({ warehouseId: WAREHOUSE, page: 1, pageSize: 20 }, ADMIN_ACTOR),
     ).rejects.toBeInstanceOf(NotFoundError);
     expect(store.listLevels).not.toHaveBeenCalled();
   });
@@ -69,11 +69,10 @@ describe('StockQueryService.listLevels', () => {
 describe('StockQueryService.listMovements', () => {
   it('sin producto no filtra y calcula el desplazamiento', async () => {
     const store = fakeStore();
-    const result = await createStockQueryService({ store }).listMovements({
-      warehouseId: WAREHOUSE,
-      page: 2,
-      pageSize: 10,
-    });
+    const result = await createStockQueryService({ store, access: allowAllAccess }).listMovements(
+      { warehouseId: WAREHOUSE, page: 2, pageSize: 10 },
+      ADMIN_ACTOR,
+    );
 
     expect(store.productExists).not.toHaveBeenCalled();
     expect(store.listMovements).toHaveBeenCalledWith(WAREHOUSE, undefined, 10, 10);
@@ -82,12 +81,10 @@ describe('StockQueryService.listMovements', () => {
 
   it('con producto lo valida y lo pasa como filtro', async () => {
     const store = fakeStore();
-    await createStockQueryService({ store }).listMovements({
-      warehouseId: WAREHOUSE,
-      productId: PRODUCT,
-      page: 1,
-      pageSize: 20,
-    });
+    await createStockQueryService({ store, access: allowAllAccess }).listMovements(
+      { warehouseId: WAREHOUSE, productId: PRODUCT, page: 1, pageSize: 20 },
+      ADMIN_ACTOR,
+    );
 
     expect(store.productExists).toHaveBeenCalledWith(PRODUCT);
     expect(store.listMovements).toHaveBeenCalledWith(WAREHOUSE, PRODUCT, 20, 0);
@@ -95,19 +92,22 @@ describe('StockQueryService.listMovements', () => {
 
   it('lanza NotFoundError si la bodega no existe', async () => {
     const store = fakeStore({ warehouseExists: vi.fn(async () => false) });
-    const service = createStockQueryService({ store });
+    const service = createStockQueryService({ store, access: allowAllAccess });
 
     await expect(
-      service.listMovements({ warehouseId: WAREHOUSE, page: 1, pageSize: 20 }),
+      service.listMovements({ warehouseId: WAREHOUSE, page: 1, pageSize: 20 }, ADMIN_ACTOR),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
   it('lanza NotFoundError si el producto no existe', async () => {
     const store = fakeStore({ productExists: vi.fn(async () => false) });
-    const service = createStockQueryService({ store });
+    const service = createStockQueryService({ store, access: allowAllAccess });
 
     await expect(
-      service.listMovements({ warehouseId: WAREHOUSE, productId: PRODUCT, page: 1, pageSize: 20 }),
+      service.listMovements(
+        { warehouseId: WAREHOUSE, productId: PRODUCT, page: 1, pageSize: 20 },
+        ADMIN_ACTOR,
+      ),
     ).rejects.toBeInstanceOf(NotFoundError);
     expect(store.listMovements).not.toHaveBeenCalled();
   });
