@@ -18,6 +18,7 @@ const envSchema = z.object({
   RATE_LIMIT_GENERAL_MAX: z.coerce.number().int().min(1).default(300),
   RATE_LIMIT_GENERAL_WINDOW_SECONDS: z.coerce.number().int().min(1).default(60),
   RATE_LIMIT_AUTH_MAX: z.coerce.number().int().min(1).default(10),
+  RATE_LIMIT_REFRESH_MAX: z.coerce.number().int().min(1).default(60),
   RATE_LIMIT_AUTH_WINDOW_SECONDS: z.coerce.number().int().min(1).default(900),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 });
