@@ -76,3 +76,29 @@ export function createWarehousesRepository(db: Pool | PoolClient): WarehouseStor
     },
   };
 }
+
+export interface WarehouseSeedRepository {
+  /** Crea la bodega si no existe (por código, sin distinguir mayúsculas) y devuelve su id. */
+  ensureByCode(warehouse: { code: string; name: string }): Promise<string>;
+}
+
+/** Solo para el seed: deja la bodega de ejemplo creada sin duplicarla. */
+export function createWarehouseSeedRepository(db: Pool | PoolClient): WarehouseSeedRepository {
+  return {
+    async ensureByCode({ code, name }) {
+      await db.query('INSERT INTO warehouses (code, name) VALUES ($1, $2) ON CONFLICT DO NOTHING', [
+        code,
+        name,
+      ]);
+      const { rows } = await db.query<{ id: string }>(
+        'SELECT id FROM warehouses WHERE lower(code) = lower($1)',
+        [code],
+      );
+      const row = rows[0];
+      if (!row) {
+        throw new Error(`No se pudo crear la bodega ${code}`);
+      }
+      return row.id;
+    },
+  };
+}

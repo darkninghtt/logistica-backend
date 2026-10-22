@@ -6,13 +6,18 @@ export interface UserWriter {
   insertIfAbsent(user: NewUser): Promise<boolean>;
 }
 
-export interface AdminSeed {
+export interface UserSeed {
   email: string;
   password: string;
   name: string;
+  role: Role;
 }
 
+export type AdminSeed = Omit<UserSeed, 'role'>;
+
 export interface UsersService {
+  /** Crea el usuario si no existe (por correo). Devuelve true si lo creó, false si ya estaba. */
+  ensureUser(seed: UserSeed): Promise<boolean>;
   /** Crea el usuario ADMIN si no existe. Devuelve true si lo creó, false si ya estaba. */
   ensureAdmin(seed: AdminSeed): Promise<boolean>;
 }
@@ -24,17 +29,13 @@ export function createUsersService({
   users: UserWriter;
   hasher: PasswordHasher;
 }): UsersService {
-  const adminRole: Role = 'ADMIN';
+  async function ensureUser({ email, password, name, role }: UserSeed): Promise<boolean> {
+    const passwordHash = await hasher.hash(password);
+    return users.insertIfAbsent({ email: email.toLowerCase(), passwordHash, name, role });
+  }
 
   return {
-    async ensureAdmin({ email, password, name }) {
-      const passwordHash = await hasher.hash(password);
-      return users.insertIfAbsent({
-        email: email.toLowerCase(),
-        passwordHash,
-        name,
-        role: adminRole,
-      });
-    },
+    ensureUser,
+    ensureAdmin: (seed) => ensureUser({ ...seed, role: 'ADMIN' }),
   };
 }

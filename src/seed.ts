@@ -1,43 +1,42 @@
 import { z } from 'zod';
 import { createPool } from './db';
 import { createUsersRepository } from './repositories/users';
+import { createWarehouseSeedRepository } from './repositories/warehouses';
+import { buildSeedPlan } from './seed-plan';
 import { createArgon2Hasher } from './services/password-hasher';
+import { createSeedService } from './services/seed';
 import { createUsersService } from './services/users';
 
-const seedEnvSchema = z.object({
-  DATABASE_URL: z.string().min(1),
-  SEED_ADMIN_EMAIL: z.string().email(),
-  SEED_ADMIN_PASSWORD: z.string().min(12, 'debe tener al menos 12 caracteres'),
-  SEED_ADMIN_NAME: z.string().min(1).default('Administrador'),
-});
-
-/** `npm run seed`: crea el usuario ADMIN de desarrollo si no existe (es idempotente). */
+/**
+ * `npm run seed`: crea el ADMIN y, si sus variables están definidas, el jefe de bodega, el
+ * operario y el auditor, con bodegas de ejemplo. Es idempotente: se puede correr varias veces.
+ */
 async function main(): Promise<void> {
-  const env = seedEnvSchema.parse(process.env);
-  const pool = createPool(env.DATABASE_URL);
+  const { DATABASE_URL } = z.object({ DATABASE_URL: z.string().min(1) }).parse(process.env);
+  const plan = buildSeedPlan(process.env);
+  const pool = createPool(DATABASE_URL);
   try {
-    const service = createUsersService({
-      users: createUsersRepository(pool),
-      hasher: createArgon2Hasher(),
+    const users = createUsersRepository(pool);
+    const usersService = createUsersService({ users, hasher: createArgon2Hasher() });
+    const warehouses = createWarehouseSeedRepository(pool);
+    const seed = createSeedService({
+      ensureUser: (user) => usersService.ensureUser(user),
+      async findUserId(email) {
+        return (await users.findByEmail(email))?.id ?? null;
+      },
+      ensureWarehouse: (warehouse) => warehouses.ensureByCode(warehouse),
+      addWarehouses: (userId, ids) => users.addWarehouses(userId, ids),
     });
-    const created = await service.ensureAdmin({
-      email: env.SEED_ADMIN_EMAIL,
-      password: env.SEED_ADMIN_PASSWORD,
-      name: env.SEED_ADMIN_NAME,
-    });
-    process.stdout.write(
-      created
-        ? `ADMIN creado: ${env.SEED_ADMIN_EMAIL}\n`
-        : `El ADMIN ya existía: ${env.SEED_ADMIN_EMAIL}\n`,
-    );
+
+    const { createdUsers, existingUsers } = await seed.run(plan);
+    for (const email of createdUsers) process.stdout.write(`Usuario creado: ${email}\n`);
+    for (const email of existingUsers) process.stdout.write(`El usuario ya existía: ${email}\n`);
   } finally {
     await pool.end();
   }
 }
 
 main().catch((err: unknown) => {
-  process.stderr.write(
-    `No se pudo crear el ADMIN: ${err instanceof Error ? err.message : String(err)}\n`,
-  );
+  process.stderr.write(`No se pudo sembrar: ${err instanceof Error ? err.message : String(err)}\n`);
   process.exit(1);
 });

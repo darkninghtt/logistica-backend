@@ -19,7 +19,7 @@
     "migrate:down": "node --env-file-if-exists=.env node_modules/node-pg-migrate/bin/node-pg-migrate.js down",
     "migrate:test:up": "node --env-file-if-exists=.env node_modules/node-pg-migrate/bin/node-pg-migrate.js up --database-url-var TEST_DATABASE_URL",
     "migrate:test:down": "node --env-file-if-exists=.env node_modules/node-pg-migrate/bin/node-pg-migrate.js down --database-url-var TEST_DATABASE_URL",
-    "seed": "tsx --env-file-if-exists=.env src/seed-admin.ts"
+    "seed": "tsx --env-file-if-exists=.env src/seed.ts"
   },
   "dependencies": {
     "argon2": "^0.45.1",
