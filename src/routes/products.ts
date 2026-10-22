@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { ProductsController } from '../controllers/products';
+import { requireRole } from '../middlewares/require-role';
 
 /**
  * @openapi
@@ -35,7 +36,7 @@ import type { ProductsController } from '../controllers/products';
  *               $ref: '#/components/schemas/ErrorResponse'
  *   post:
  *     tags: [Productos]
- *     summary: Crea un producto
+ *     summary: Crea un producto (solo ADMIN)
  *     requestBody:
  *       required: true
  *       content:
@@ -61,6 +62,12 @@ import type { ProductsController } from '../controllers/products';
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Solo el ADMIN crea productos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
  *         description: Ya existe un producto con ese SKU
  *         content:
@@ -70,7 +77,7 @@ import type { ProductsController } from '../controllers/products';
  * /api/products/{id}:
  *   put:
  *     tags: [Productos]
- *     summary: Edita un producto (reemplaza SKU, nombre y unidad)
+ *     summary: Edita un producto (solo ADMIN; reemplaza SKU, nombre y unidad)
  *     parameters:
  *       - in: path
  *         name: id
@@ -101,6 +108,12 @@ import type { ProductsController } from '../controllers/products';
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Solo el ADMIN edita productos
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
  *         description: El producto no existe
  *         content:
@@ -117,7 +130,7 @@ import type { ProductsController } from '../controllers/products';
 export function createProductsRouter(controller: ProductsController): Router {
   const router = Router();
   router.get('/', controller.list);
-  router.post('/', controller.create);
-  router.put('/:id', controller.update);
+  router.post('/', requireRole('ADMIN'), controller.create);
+  router.put('/:id', requireRole('ADMIN'), controller.update);
   return router;
 }

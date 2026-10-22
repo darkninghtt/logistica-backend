@@ -17,6 +17,7 @@ import { createStockQueryService } from './services/stock-queries';
 import { createTokenService } from './services/token-service';
 import { createUserManagementService } from './services/user-management';
 import { createWarehousesService } from './services/warehouses';
+import { createWarehouseAccess } from './services/warehouse-access';
 
 function main(): void {
   const config = loadConfig(process.env);
@@ -42,15 +43,23 @@ function main(): void {
     tokens,
     sessions,
   });
+  const access = createWarehouseAccess({
+    assignments: { warehouseIdsOf: (userId) => usersRepository.warehouseIdsOf(userId) },
+  });
   const warehousesService = createWarehousesService({
     warehouses: createWarehousesRepository(pool),
+    access,
   });
   const productsService = createProductsService({ products: createProductsRepository(pool) });
   const stockService = createStockService({
+    access,
     runInTransaction: (work) =>
       withTransaction(pool, (client) => work(createStockRepository(client))),
   });
-  const stockQueryService = createStockQueryService({ store: createStockQueryRepository(pool) });
+  const stockQueryService = createStockQueryService({
+    store: createStockQueryRepository(pool),
+    access,
+  });
   const userManagementService = createUserManagementService({
     users: usersRepository,
     hasher: createArgon2Hasher(),

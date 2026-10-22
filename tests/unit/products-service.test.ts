@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { NotFoundError } from '../../src/domain/errors';
 import type { Product } from '../../src/domain/product';
 import { createProductsService, type ProductStore } from '../../src/services/products';
+import { ADMIN_ACTOR } from '../helpers/actors';
 
 const product: Product = {
   id: 'p-1',
@@ -33,7 +34,9 @@ describe('ProductsService', () => {
     const store = fakeStore();
     const input = { sku: 'SKU-1', name: 'Tornillo', unit: 'un' };
 
-    expect(await createProductsService({ products: store }).create(input)).toEqual(product);
+    expect(await createProductsService({ products: store }).create(input, ADMIN_ACTOR)).toEqual(
+      product,
+    );
     expect(store.insert).toHaveBeenCalledWith(input);
   });
 
@@ -41,7 +44,7 @@ describe('ProductsService', () => {
     const store = fakeStore();
     const input = { sku: 'SKU-1', name: 'Nuevo nombre', unit: 'kg' };
 
-    await createProductsService({ products: store }).update('p-1', input);
+    await createProductsService({ products: store }).update('p-1', input, ADMIN_ACTOR);
     expect(store.update).toHaveBeenCalledWith('p-1', input);
   });
 
@@ -50,7 +53,7 @@ describe('ProductsService', () => {
     const service = createProductsService({ products: store });
 
     await expect(
-      service.update('no-existe', { sku: 'A', name: 'A', unit: 'un' }),
+      service.update('no-existe', { sku: 'A', name: 'A', unit: 'un' }, ADMIN_ACTOR),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 });

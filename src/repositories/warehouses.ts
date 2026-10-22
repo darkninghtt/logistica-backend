@@ -36,12 +36,18 @@ function duplicateCode(): ConflictError {
 /** Solo SQL. Recibe el pool o el cliente de una transacción. */
 export function createWarehousesRepository(db: Pool | PoolClient): WarehouseStore {
   return {
-    async list(limit, offset) {
+    async list(limit, offset, onlyIds) {
+      // `$3::uuid[] IS NULL` deja el filtro por bodegas asignadas como opcional con una sola consulta
       const { rows } = await db.query<WarehouseRow>(
-        `SELECT ${COLUMNS} FROM warehouses ORDER BY lower(code) LIMIT $1 OFFSET $2`,
-        [limit, offset],
+        `SELECT ${COLUMNS} FROM warehouses
+         WHERE ($3::uuid[] IS NULL OR id = ANY($3::uuid[]))
+         ORDER BY lower(code) LIMIT $1 OFFSET $2`,
+        [limit, offset, onlyIds],
       );
-      const count = await db.query<{ total: string }>('SELECT count(*) AS total FROM warehouses');
+      const count = await db.query<{ total: string }>(
+        'SELECT count(*) AS total FROM warehouses WHERE ($1::uuid[] IS NULL OR id = ANY($1::uuid[]))',
+        [onlyIds],
+      );
       return { rows: rows.map(toWarehouse), total: Number(count.rows[0]?.total ?? 0) };
     },
 

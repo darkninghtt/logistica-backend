@@ -1,13 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { Actor } from '../../src/domain/authorization';
 import { ValidationError } from '../../src/domain/errors';
 import type { StockLevel, StockMovement } from '../../src/domain/stock';
 import { stockEntryBodySchema } from '../../src/schemas/stock';
 import { parseWith } from '../../src/schemas/parse';
 import { createStockService, type StockStore } from '../../src/services/stock';
+import { allowAllAccess } from '../helpers/actors';
 
 const PRODUCT = '11111111-1111-4111-8111-111111111111';
 const WAREHOUSE = '22222222-2222-4222-8222-222222222222';
 const USER = '33333333-3333-4333-8333-333333333333';
+const ACTOR: Actor = { userId: USER, role: 'ADMIN' };
 
 function fakeStore(current = { quantity: 10, avgCost: '100.0000' }): {
   store: StockStore;
@@ -37,11 +40,14 @@ function fakeStore(current = { quantity: 10, avgCost: '100.0000' }): {
 describe('StockService.registerEntry', () => {
   it('bloquea el nivel, calcula el CPP y guarda nivel y movimiento, en ese orden', async () => {
     const { store, calls } = fakeStore();
-    const service = createStockService({ runInTransaction: (work) => work(store) });
+    const service = createStockService({
+      runInTransaction: (work) => work(store),
+      access: allowAllAccess,
+    });
 
     const result = await service.registerEntry(
       { productId: PRODUCT, warehouseId: WAREHOUSE, quantity: 10, unitCost: '120' },
-      USER,
+      ACTOR,
     );
 
     expect(calls).toEqual(['ensureLevel', 'lockLevel', 'saveLevel', 'insertMovement']);
@@ -58,12 +64,15 @@ describe('StockService.registerEntry', () => {
 
   it('si la regla de dominio falla, no guarda nada', async () => {
     const { store, calls } = fakeStore({ quantity: 1_000_000_000, avgCost: '1.0000' });
-    const service = createStockService({ runInTransaction: (work) => work(store) });
+    const service = createStockService({
+      runInTransaction: (work) => work(store),
+      access: allowAllAccess,
+    });
 
     await expect(
       service.registerEntry(
         { productId: PRODUCT, warehouseId: WAREHOUSE, quantity: 1, unitCost: '1' },
-        USER,
+        ACTOR,
       ),
     ).rejects.toThrow(ValidationError);
     expect(calls).toEqual(['ensureLevel', 'lockLevel']);
@@ -74,12 +83,15 @@ describe('StockService.registerEntry', () => {
     store.insertMovement = vi.fn(async () => {
       throw new Error('fallo simulado');
     });
-    const service = createStockService({ runInTransaction: (work) => work(store) });
+    const service = createStockService({
+      runInTransaction: (work) => work(store),
+      access: allowAllAccess,
+    });
 
     await expect(
       service.registerEntry(
         { productId: PRODUCT, warehouseId: WAREHOUSE, quantity: 1, unitCost: '1' },
-        USER,
+        ACTOR,
       ),
     ).rejects.toThrow('fallo simulado');
   });

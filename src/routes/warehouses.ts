@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { WarehousesController } from '../controllers/warehouses';
+import { requireRole } from '../middlewares/require-role';
 
 /**
  * @openapi
@@ -7,6 +8,7 @@ import type { WarehousesController } from '../controllers/warehouses';
  *   get:
  *     tags: [Bodegas]
  *     summary: Lista las bodegas (paginada, ordenadas por código)
+ *     description: ADMIN y AUDITOR ven todas; WAREHOUSE_MANAGER y OPERATOR, solo las asignadas.
  *     parameters:
  *       - in: query
  *         name: page
@@ -35,7 +37,7 @@ import type { WarehousesController } from '../controllers/warehouses';
  *               $ref: '#/components/schemas/ErrorResponse'
  *   post:
  *     tags: [Bodegas]
- *     summary: Crea una bodega
+ *     summary: Crea una bodega (solo ADMIN)
  *     requestBody:
  *       required: true
  *       content:
@@ -61,6 +63,12 @@ import type { WarehousesController } from '../controllers/warehouses';
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Solo el ADMIN crea bodegas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
  *         description: Ya existe una bodega con ese código
  *         content:
@@ -70,7 +78,7 @@ import type { WarehousesController } from '../controllers/warehouses';
  * /api/warehouses/{id}:
  *   put:
  *     tags: [Bodegas]
- *     summary: Edita una bodega (reemplaza código, nombre y estado activo)
+ *     summary: Edita una bodega (solo ADMIN; reemplaza código, nombre y estado activo)
  *     parameters:
  *       - in: path
  *         name: id
@@ -101,6 +109,12 @@ import type { WarehousesController } from '../controllers/warehouses';
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Solo el ADMIN edita bodegas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
  *         description: La bodega no existe
  *         content:
@@ -117,7 +131,7 @@ import type { WarehousesController } from '../controllers/warehouses';
 export function createWarehousesRouter(controller: WarehousesController): Router {
   const router = Router();
   router.get('/', controller.list);
-  router.post('/', controller.create);
-  router.put('/:id', controller.update);
+  router.post('/', requireRole('ADMIN'), controller.create);
+  router.put('/:id', requireRole('ADMIN'), controller.update);
   return router;
 }

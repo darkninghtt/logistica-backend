@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import { UnauthorizedError } from '../domain/errors';
+import { getActor } from '../middlewares/authenticate';
 import { parseWith } from '../schemas/parse';
 import { stockEntryBodySchema } from '../schemas/stock';
 import type { StockService } from '../services/stock';
@@ -12,11 +12,8 @@ export interface StockController {
 export function createStockController(service: StockService): StockController {
   return {
     async createEntry(req, res) {
-      if (!req.auth) {
-        throw new UnauthorizedError();
-      }
       const input = parseWith(stockEntryBodySchema, req.body);
-      res.status(201).json(await service.registerEntry(input, req.auth.userId));
+      res.status(201).json(await service.registerEntry(input, getActor(req)));
     },
   };
 }

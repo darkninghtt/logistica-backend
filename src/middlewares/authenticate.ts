@@ -1,4 +1,4 @@
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler } from 'express';
 import { UnauthorizedError } from '../domain/errors';
 import type { AuthIdentity, TokenService } from '../services/auth';
 
@@ -7,6 +7,14 @@ declare module 'express-serve-static-core' {
     /** Identidad del token; solo existe después de pasar por `authenticate`. */
     auth?: AuthIdentity;
   }
+}
+
+/** Identidad del token para los controladores; falla con 401 si la ruta no pasó por `authenticate`. */
+export function getActor(req: Request): AuthIdentity {
+  if (!req.auth) {
+    throw new UnauthorizedError();
+  }
+  return req.auth;
 }
 
 const BEARER = /^Bearer (\S+)$/;

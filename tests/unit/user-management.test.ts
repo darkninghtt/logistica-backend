@@ -12,6 +12,7 @@ import {
   createUserManagementService,
   type UserManagementStore,
 } from '../../src/services/user-management';
+import { ADMIN_ACTOR } from '../helpers/actors';
 
 const user: ManagedUser = {
   id: 'u-1',
@@ -42,10 +43,10 @@ function fakeStore(overrides: Partial<UserManagementStore> = {}): UserManagement
 describe('UserManagementService', () => {
   it('list calcula el desplazamiento y devuelve el formato de lista', async () => {
     const store = fakeStore();
-    const result = await createUserManagementService({ users: store, hasher }).list({
-      page: 3,
-      pageSize: 20,
-    });
+    const result = await createUserManagementService({ users: store, hasher }).list(
+      { page: 3, pageSize: 20 },
+      ADMIN_ACTOR,
+    );
 
     expect(store.list).toHaveBeenCalledWith(20, 40);
     expect(result).toEqual({ data: [user], page: 3, pageSize: 20, total: 41 });
@@ -53,13 +54,16 @@ describe('UserManagementService', () => {
 
   it('create guarda el hash de la contraseña, nunca la contraseña', async () => {
     const store = fakeStore();
-    await createUserManagementService({ users: store, hasher }).create({
-      email: 'a@b.co',
-      name: 'A',
-      role: 'OPERATOR',
-      password: 'Clave-segura-123',
-      active: true,
-    });
+    await createUserManagementService({ users: store, hasher }).create(
+      {
+        email: 'a@b.co',
+        name: 'A',
+        role: 'OPERATOR',
+        password: 'Clave-segura-123',
+        active: true,
+      },
+      ADMIN_ACTOR,
+    );
 
     expect(store.insert).toHaveBeenCalledWith({
       email: 'a@b.co',
@@ -75,10 +79,10 @@ describe('UserManagementService', () => {
     const service = createUserManagementService({ users: store, hasher });
     const base = { email: 'a@b.co', name: 'A', role: 'OPERATOR', active: true } as const;
 
-    await service.update('u-1', base);
+    await service.update('u-1', base, ADMIN_ACTOR);
     expect(store.update).toHaveBeenLastCalledWith('u-1', base);
 
-    await service.update('u-1', { ...base, password: 'Clave-segura-123' });
+    await service.update('u-1', { ...base, password: 'Clave-segura-123' }, ADMIN_ACTOR);
     expect(store.update).toHaveBeenLastCalledWith('u-1', {
       ...base,
       passwordHash: 'hash:Clave-segura-123',
@@ -91,7 +95,11 @@ describe('UserManagementService', () => {
       hasher,
     });
     await expect(
-      service.update('x', { email: 'a@b.co', name: 'A', role: 'OPERATOR', active: true }),
+      service.update(
+        'x',
+        { email: 'a@b.co', name: 'A', role: 'OPERATOR', active: true },
+        ADMIN_ACTOR,
+      ),
     ).rejects.toThrow(NotFoundError);
   });
 
@@ -100,6 +108,7 @@ describe('UserManagementService', () => {
     const result = await createUserManagementService({ users: store, hasher }).setWarehouses(
       'u-1',
       ['b', 'a'],
+      ADMIN_ACTOR,
     );
 
     expect(store.replaceWarehouses).toHaveBeenCalledWith('u-1', ['b', 'a']);
@@ -109,7 +118,7 @@ describe('UserManagementService', () => {
   it('setWarehouses de un usuario inexistente lanza NotFoundError sin tocar las asignaciones', async () => {
     const store = fakeStore({ findManagedById: async () => null });
     await expect(
-      createUserManagementService({ users: store, hasher }).setWarehouses('x', []),
+      createUserManagementService({ users: store, hasher }).setWarehouses('x', [], ADMIN_ACTOR),
     ).rejects.toThrow(NotFoundError);
     expect(store.replaceWarehouses).not.toHaveBeenCalled();
   });

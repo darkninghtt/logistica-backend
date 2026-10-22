@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { StockController } from '../controllers/stock';
+import { requireRole } from '../middlewares/require-role';
 
 /**
  * @openapi
@@ -35,6 +36,12 @@ import type { StockController } from '../controllers/stock';
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Solo el ADMIN (cualquier bodega) y el WAREHOUSE_MANAGER (sus bodegas asignadas) registran entradas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
  *         description: El producto o la bodega no existen
  *         content:
@@ -44,6 +51,6 @@ import type { StockController } from '../controllers/stock';
  */
 export function createStockRouter(controller: StockController): Router {
   const router = Router();
-  router.post('/entries', controller.createEntry);
+  router.post('/entries', requireRole('ADMIN', 'WAREHOUSE_MANAGER'), controller.createEntry);
   return router;
 }

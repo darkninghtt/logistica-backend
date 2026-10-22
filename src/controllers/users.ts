@@ -1,5 +1,6 @@
 import type { RequestHandler } from 'express';
 import { idParamSchema, pageQuerySchema } from '../schemas/page';
+import { getActor } from '../middlewares/authenticate';
 import { parseWith } from '../schemas/parse';
 import {
   createUserBodySchema,
@@ -19,23 +20,26 @@ export interface UsersController {
 export function createUsersController(service: UserManagementService): UsersController {
   return {
     async list(req, res) {
-      res.json(await service.list(parseWith(pageQuerySchema, req.query)));
+      res.json(await service.list(parseWith(pageQuerySchema, req.query), getActor(req)));
     },
 
     async create(req, res) {
-      const created = await service.create(parseWith(createUserBodySchema, req.body));
+      const created = await service.create(
+        parseWith(createUserBodySchema, req.body),
+        getActor(req),
+      );
       res.status(201).json(created);
     },
 
     async update(req, res) {
       const { id } = parseWith(idParamSchema, req.params);
-      res.json(await service.update(id, parseWith(updateUserBodySchema, req.body)));
+      res.json(await service.update(id, parseWith(updateUserBodySchema, req.body), getActor(req)));
     },
 
     async setWarehouses(req, res) {
       const { id } = parseWith(idParamSchema, req.params);
       const { warehouseIds } = parseWith(userWarehousesBodySchema, req.body);
-      res.json(await service.setWarehouses(id, warehouseIds));
+      res.json(await service.setWarehouses(id, warehouseIds, getActor(req)));
     },
   };
 }

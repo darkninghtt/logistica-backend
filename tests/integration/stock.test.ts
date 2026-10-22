@@ -6,6 +6,7 @@ import { applyEntry, type StockBalance } from '../../src/domain/stock';
 import { createStockRepository } from '../../src/repositories/stock';
 import { createStockService } from '../../src/services/stock';
 import { ADMIN, buildTestApp, seedTestAdmin } from '../helpers/app';
+import { allowAllAccess } from '../helpers/actors';
 import { createTestPool, truncateAll } from '../helpers/db';
 
 const pool: Pool = createTestPool();
@@ -146,6 +147,7 @@ describe('atomicidad', () => {
     await request(app).post('/api/stock/entries').set(auth()).send(entry(10, '100'));
 
     const failing = createStockService({
+      access: allowAllAccess,
       runInTransaction: (work) =>
         withTransaction(pool, (client) =>
           work({
@@ -158,7 +160,10 @@ describe('atomicidad', () => {
     });
 
     await expect(
-      failing.registerEntry({ warehouseId, productId, quantity: 5, unitCost: '500' }, userId),
+      failing.registerEntry(
+        { warehouseId, productId, quantity: 5, unitCost: '500' },
+        { userId, role: 'ADMIN' },
+      ),
     ).rejects.toThrow('fallo simulado');
 
     expect(await level()).toMatchObject({ quantity: 10, avg_cost: '100.0000', version: 1 });
@@ -167,6 +172,7 @@ describe('atomicidad', () => {
 
   it('una primera entrada que falla no deja ni el nivel en cero', async () => {
     const failing = createStockService({
+      access: allowAllAccess,
       runInTransaction: (work) =>
         withTransaction(pool, (client) =>
           work({
@@ -178,7 +184,10 @@ describe('atomicidad', () => {
         ),
     });
     await expect(
-      failing.registerEntry({ warehouseId, productId, quantity: 5, unitCost: '5' }, userId),
+      failing.registerEntry(
+        { warehouseId, productId, quantity: 5, unitCost: '5' },
+        { userId, role: 'ADMIN' },
+      ),
     ).rejects.toThrow('fallo simulado');
     expect(await count('stock_levels')).toBe(0);
   });
