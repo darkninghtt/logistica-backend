@@ -87,7 +87,7 @@ export function createApp({
   const loginLimiter = rateLimits ? createAuthLimiter(rateLimits.auth) : passThrough;
   const refreshLimiter = rateLimits
     ? createAuthLimiter(
-        rateLimits.auth,
+        rateLimits.refresh,
         (req) => readCookie(req.headers.cookie, REFRESH_COOKIE) === undefined,
       )
     : passThrough;

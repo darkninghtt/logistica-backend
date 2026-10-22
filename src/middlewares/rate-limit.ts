@@ -10,8 +10,14 @@ export interface LimitConfig {
 export interface RateLimits {
   /** Límite general por IP sobre toda la API. */
   general: LimitConfig;
-  /** Límite estricto por IP para login y refresh (contra fuerza bruta). */
+  /** Límite estricto por IP para el login (contra fuerza bruta de contraseñas). */
   auth: LimitConfig;
+  /**
+   * Límite del refresh, más holgado: el token tiene 256 bits (no se puede adivinar) y recargar la
+   * página varias veces seguidas deja intentos sin devolver (peticiones abortadas o con la cookie
+   * ya rotada) que no deben bloquear a un usuario legítimo.
+   */
+  refresh: LimitConfig;
 }
 
 function build(

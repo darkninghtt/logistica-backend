@@ -84,6 +84,10 @@ function main(): void {
         limit: config.RATE_LIMIT_AUTH_MAX,
         windowMs: config.RATE_LIMIT_AUTH_WINDOW_SECONDS * 1000,
       },
+      refresh: {
+        limit: config.RATE_LIMIT_REFRESH_MAX,
+        windowMs: config.RATE_LIMIT_AUTH_WINDOW_SECONDS * 1000,
+      },
     },
     publicDir: config.PUBLIC_DIR,
   });
