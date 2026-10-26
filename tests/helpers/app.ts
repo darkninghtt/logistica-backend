@@ -7,6 +7,10 @@ import { createRefreshTokensRepository } from '../../src/repositories/refresh-to
 import { createProductsRepository } from '../../src/repositories/products';
 import { createStockRepository } from '../../src/repositories/stock';
 import { createStockQueryRepository } from '../../src/repositories/stock-queries';
+import {
+  createTransfersReadRepository,
+  createTransfersWriteRepository,
+} from '../../src/repositories/transfers';
 import { createUsersRepository } from '../../src/repositories/users';
 import { createWarehousesRepository } from '../../src/repositories/warehouses';
 import { createAuthService, type TokenService } from '../../src/services/auth';
@@ -16,6 +20,7 @@ import { createSessionService } from '../../src/services/sessions';
 import { createStockService } from '../../src/services/stock';
 import { createStockQueryService } from '../../src/services/stock-queries';
 import { createTokenService } from '../../src/services/token-service';
+import { createTransfersService } from '../../src/services/transfers';
 import { createUserManagementService } from '../../src/services/user-management';
 import { createUsersService } from '../../src/services/users';
 import { createWarehousesService } from '../../src/services/warehouses';
@@ -61,6 +66,17 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
     store: createStockQueryRepository(pool),
     access,
   });
+  const transfersService = createTransfersService({
+    store: createTransfersReadRepository(pool),
+    runInTransaction: (work) =>
+      withTransaction(pool, (client) =>
+        work({
+          transfers: createTransfersWriteRepository(client),
+          stock: createStockRepository(client),
+        }),
+      ),
+    access,
+  });
   const userManagementService = createUserManagementService({ users, hasher });
   const deps: AppDeps = {
     logger: pino({ level: 'silent' }),
@@ -70,6 +86,7 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
     productsService,
     stockService,
     stockQueryService,
+    transfersService,
     userManagementService,
   };
   return { app: createApp(deps), tokens, deps };

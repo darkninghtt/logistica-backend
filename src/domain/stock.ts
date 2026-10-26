@@ -86,6 +86,10 @@ export interface StockMovement {
   unitCost: string;
   balanceQty: number;
   balanceAvgCost: string;
+  /** Motivo (mermas y ajustes); null si el movimiento no lo lleva. */
+  reason: string | null;
+  /** Traspaso que originó el movimiento; null si no viene de uno. */
+  transferId: string | null;
   createdBy: string;
   createdAt: string;
 }

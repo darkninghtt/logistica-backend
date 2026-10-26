@@ -5,6 +5,7 @@ import { createAuthController, readCookie, REFRESH_COOKIE } from './controllers/
 import { createProductsController } from './controllers/products';
 import { createStockController } from './controllers/stock';
 import { createStockQueryController } from './controllers/stock-queries';
+import { createTransfersController } from './controllers/transfers';
 import { createUsersController } from './controllers/users';
 import { createWarehousesController } from './controllers/warehouses';
 import { createHttpLogger } from './logger';
@@ -17,12 +18,14 @@ import { createHealthRouter } from './routes/health';
 import { createProductsRouter } from './routes/products';
 import { createStockRouter } from './routes/stock';
 import { createStockQueryRouter } from './routes/stock-queries';
+import { createTransfersRouter } from './routes/transfers';
 import { createUsersRouter } from './routes/users';
 import { createWarehousesRouter } from './routes/warehouses';
 import type { AuthService, TokenService } from './services/auth';
 import type { ProductsService } from './services/products';
 import type { StockService } from './services/stock';
 import type { StockQueryService } from './services/stock-queries';
+import type { TransfersService } from './services/transfers';
 import type { UserManagementService } from './services/user-management';
 import type { WarehousesService } from './services/warehouses';
 import { buildOpenApiSpec } from './swagger';
@@ -35,6 +38,7 @@ export interface AppDeps {
   productsService: ProductsService;
   stockService: StockService;
   stockQueryService: StockQueryService;
+  transfersService: TransfersService;
   userManagementService: UserManagementService;
   /** Saltos de proxy de confianza (`trust proxy`); 0 si no hay proxy delante. */
   trustProxy?: number;
@@ -55,6 +59,7 @@ export function createApp({
   productsService,
   stockService,
   stockQueryService,
+  transfersService,
   userManagementService,
   trustProxy = 0,
   rateLimits,
@@ -104,6 +109,7 @@ export function createApp({
   app.use('/api/products', createProductsRouter(createProductsController(productsService)));
   app.use('/api/stock', createStockRouter(createStockController(stockService)));
   app.use('/api/stock', createStockQueryRouter(createStockQueryController(stockQueryService)));
+  app.use('/api/transfers', createTransfersRouter(createTransfersController(transfersService)));
 
   // Frontend (un solo origen): archivos estáticos y fallback al router de Vue
   const frontend = publicDir === undefined ? null : createFrontendHandlers(publicDir);

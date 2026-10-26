@@ -18,6 +18,8 @@ export interface NewMovement {
   balanceQty: number;
   balanceAvgCost: string;
   createdBy: string;
+  reason?: string;
+  transferId?: string;
 }
 
 /** Lo que el servicio necesita de la persistencia; todo corre dentro de la misma transacción. */
