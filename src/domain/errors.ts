@@ -4,6 +4,8 @@ export type ErrorCode =
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'CONFLICT'
+  | 'INVALID_TRANSITION'
+  | 'INSUFFICIENT_STOCK'
   | 'TOO_MANY_REQUESTS'
   | 'INTERNAL_ERROR';
 
@@ -49,8 +51,17 @@ export class TooManyRequestsError extends AppError {
   }
 }
 
+/** Conflictos 409. El código por defecto es CONFLICT; los traspasos usan INVALID_TRANSITION e INSUFFICIENT_STOCK. */
+export type ConflictCode = Extract<
+  ErrorCode,
+  'CONFLICT' | 'INVALID_TRANSITION' | 'INSUFFICIENT_STOCK'
+>;
+
 export class ConflictError extends AppError {
-  constructor(message = 'El recurso entra en conflicto con el estado actual') {
-    super('CONFLICT', 409, message);
+  constructor(
+    message = 'El recurso entra en conflicto con el estado actual',
+    code: ConflictCode = 'CONFLICT',
+  ) {
+    super(code, 409, message);
   }
 }
