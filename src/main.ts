@@ -6,6 +6,10 @@ import { createRefreshTokensRepository } from './repositories/refresh-tokens';
 import { createProductsRepository } from './repositories/products';
 import { createStockRepository } from './repositories/stock';
 import { createStockQueryRepository } from './repositories/stock-queries';
+import {
+  createTransfersReadRepository,
+  createTransfersWriteRepository,
+} from './repositories/transfers';
 import { createUsersRepository } from './repositories/users';
 import { createWarehousesRepository } from './repositories/warehouses';
 import { createAuthService } from './services/auth';
@@ -15,6 +19,7 @@ import { createSessionService } from './services/sessions';
 import { createStockService } from './services/stock';
 import { createStockQueryService } from './services/stock-queries';
 import { createTokenService } from './services/token-service';
+import { createTransfersService } from './services/transfers';
 import { createUserManagementService } from './services/user-management';
 import { createWarehousesService } from './services/warehouses';
 import { createWarehouseAccess } from './services/warehouse-access';
@@ -60,6 +65,17 @@ function main(): void {
     store: createStockQueryRepository(pool),
     access,
   });
+  const transfersService = createTransfersService({
+    store: createTransfersReadRepository(pool),
+    runInTransaction: (work) =>
+      withTransaction(pool, (client) =>
+        work({
+          transfers: createTransfersWriteRepository(client),
+          stock: createStockRepository(client),
+        }),
+      ),
+    access,
+  });
   const userManagementService = createUserManagementService({
     users: usersRepository,
     hasher: createArgon2Hasher(),
@@ -72,6 +88,7 @@ function main(): void {
     productsService,
     stockService,
     stockQueryService,
+    transfersService,
     userManagementService,
     trustProxy: config.TRUST_PROXY,
     cookieSecure: config.COOKIE_SECURE,

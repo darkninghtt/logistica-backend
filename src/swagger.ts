@@ -1,5 +1,7 @@
 import path from 'node:path';
 import swaggerJsdoc from 'swagger-jsdoc';
+import { MOVEMENT_TYPES } from './domain/stock';
+import { TRANSFER_STATUSES } from './domain/transfer';
 import { ROLES } from './domain/user';
 
 /**
@@ -227,13 +229,24 @@ export function buildOpenApiSpec(): object {
               id: { type: 'string', example: '1' },
               productId: { type: 'string', format: 'uuid' },
               warehouseId: { type: 'string', format: 'uuid' },
-              type: { type: 'string', enum: ['ENTRY'] },
+              type: { type: 'string', enum: [...MOVEMENT_TYPES] },
               quantity: { type: 'integer', example: 10 },
               unitCost: { type: 'string', example: '120.0000' },
               balanceQty: { type: 'integer', description: 'Saldo después del movimiento' },
               balanceAvgCost: {
                 type: 'string',
                 description: 'Costo promedio después del movimiento',
+              },
+              reason: {
+                type: 'string',
+                nullable: true,
+                description: 'Motivo (mermas, ajustes y resoluciones)',
+              },
+              transferId: {
+                type: 'string',
+                format: 'uuid',
+                nullable: true,
+                description: 'Traspaso que originó el movimiento',
               },
               createdBy: { type: 'string', format: 'uuid' },
               createdAt: { type: 'string', format: 'date-time' },
@@ -293,6 +306,146 @@ export function buildOpenApiSpec(): object {
               pageSize: { type: 'integer' },
               total: { type: 'integer' },
             },
+          },
+          TransferCreateInput: {
+            type: 'object',
+            required: ['originWarehouseId', 'destinationWarehouseId', 'items'],
+            properties: {
+              originWarehouseId: { type: 'string', format: 'uuid' },
+              destinationWarehouseId: { type: 'string', format: 'uuid' },
+              items: {
+                type: 'array',
+                minItems: 1,
+                description: 'Productos sin repetir',
+                items: {
+                  type: 'object',
+                  required: ['productId', 'quantity'],
+                  properties: {
+                    productId: { type: 'string', format: 'uuid' },
+                    quantity: { type: 'integer', minimum: 1, example: 8 },
+                  },
+                },
+              },
+              note: { type: 'string', maxLength: 500 },
+            },
+          },
+          TransferCancelInput: {
+            type: 'object',
+            properties: { reason: { type: 'string', maxLength: 500 } },
+          },
+          TransferWarehouseRef: {
+            type: 'object',
+            required: ['id', 'code', 'name'],
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              code: { type: 'string', example: 'BOD-A' },
+              name: { type: 'string', example: 'Bodega A' },
+            },
+          },
+          TransferSummary: {
+            type: 'object',
+            required: [
+              'id',
+              'status',
+              'origin',
+              'destination',
+              'itemCount',
+              'createdAt',
+              'updatedAt',
+            ],
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              status: { type: 'string', enum: [...TRANSFER_STATUSES] },
+              origin: { $ref: '#/components/schemas/TransferWarehouseRef' },
+              destination: { $ref: '#/components/schemas/TransferWarehouseRef' },
+              itemCount: { type: 'integer' },
+              createdAt: { type: 'string', format: 'date-time' },
+              updatedAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          TransferPage: {
+            type: 'object',
+            required: ['data', 'page', 'pageSize', 'total'],
+            properties: {
+              data: { type: 'array', items: { $ref: '#/components/schemas/TransferSummary' } },
+              page: { type: 'integer' },
+              pageSize: { type: 'integer' },
+              total: { type: 'integer' },
+            },
+          },
+          TransferItem: {
+            type: 'object',
+            required: [
+              'productId',
+              'productSku',
+              'productName',
+              'quantitySent',
+              'quantityReceived',
+            ],
+            properties: {
+              productId: { type: 'string', format: 'uuid' },
+              productSku: { type: 'string', example: 'SKU-001' },
+              productName: { type: 'string', example: 'Tornillo 1/4' },
+              quantitySent: { type: 'integer' },
+              quantityReceived: { type: 'integer', nullable: true },
+              unitCost: {
+                type: 'string',
+                nullable: true,
+                description:
+                  'Costo congelado al despachar (null en borrador). No se envía al OPERATOR.',
+                example: '110.0000',
+              },
+            },
+          },
+          TransferEvent: {
+            type: 'object',
+            required: ['fromStatus', 'toStatus', 'actor', 'reason', 'createdAt'],
+            properties: {
+              fromStatus: { type: 'string', nullable: true, enum: [...TRANSFER_STATUSES] },
+              toStatus: { type: 'string', enum: [...TRANSFER_STATUSES] },
+              actor: {
+                type: 'object',
+                required: ['id', 'name'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  name: { type: 'string' },
+                },
+              },
+              reason: { type: 'string', nullable: true },
+              createdAt: { type: 'string', format: 'date-time' },
+            },
+          },
+          TransferDetail: {
+            allOf: [
+              {
+                type: 'object',
+                required: ['note', 'createdBy', 'items', 'events'],
+                properties: {
+                  note: { type: 'string', nullable: true },
+                  createdBy: { type: 'string', format: 'uuid' },
+                  dispatchedBy: { type: 'string', format: 'uuid', nullable: true },
+                  dispatchedAt: { type: 'string', format: 'date-time', nullable: true },
+                  receivedBy: { type: 'string', format: 'uuid', nullable: true },
+                  receivedAt: { type: 'string', format: 'date-time', nullable: true },
+                  resolvedBy: { type: 'string', format: 'uuid', nullable: true },
+                  resolvedAt: { type: 'string', format: 'date-time', nullable: true },
+                  items: { type: 'array', items: { $ref: '#/components/schemas/TransferItem' } },
+                  events: { type: 'array', items: { $ref: '#/components/schemas/TransferEvent' } },
+                },
+              },
+              {
+                type: 'object',
+                required: ['id', 'status', 'origin', 'destination', 'createdAt', 'updatedAt'],
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  status: { type: 'string', enum: [...TRANSFER_STATUSES] },
+                  origin: { $ref: '#/components/schemas/TransferWarehouseRef' },
+                  destination: { $ref: '#/components/schemas/TransferWarehouseRef' },
+                  createdAt: { type: 'string', format: 'date-time' },
+                  updatedAt: { type: 'string', format: 'date-time' },
+                },
+              },
+            ],
           },
           ErrorResponse: {
             type: 'object',
