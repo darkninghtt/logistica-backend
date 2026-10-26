@@ -65,7 +65,16 @@ export interface StockLevel {
   totalValue: string;
 }
 
-export type MovementType = 'ENTRY';
+export const MOVEMENT_TYPES = [
+  'ENTRY',
+  'TRANSFER_OUT',
+  'TRANSFER_IN',
+  'SHRINKAGE',
+  'TRANSIT_SHRINKAGE',
+  'ADJUSTMENT_IN',
+] as const;
+
+export type MovementType = (typeof MOVEMENT_TYPES)[number];
 
 /** Fila del libro de movimientos, con el saldo y el costo promedio resultantes. */
 export interface StockMovement {

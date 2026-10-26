@@ -15,6 +15,8 @@ describe('errores de dominio', () => {
     [new ForbiddenError(), 'FORBIDDEN', 403],
     [new NotFoundError(), 'NOT_FOUND', 404],
     [new ConflictError(), 'CONFLICT', 409],
+    [new ConflictError('x', 'INVALID_TRANSITION'), 'INVALID_TRANSITION', 409],
+    [new ConflictError('x', 'INSUFFICIENT_STOCK'), 'INSUFFICIENT_STOCK', 409],
   ])('%o tiene código y estado HTTP estables', (error, code, status) => {
     expect(error).toBeInstanceOf(AppError);
     expect(error.code).toBe(code);
