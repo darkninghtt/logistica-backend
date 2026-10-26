@@ -1,6 +1,11 @@
 import type { PoolClient } from 'pg';
 import { NotFoundError } from '../domain/errors';
-import { totalValue, type StockLevel, type StockMovement } from '../domain/stock';
+import {
+  totalValue,
+  type MovementType,
+  type StockLevel,
+  type StockMovement,
+} from '../domain/stock';
 import type { StockStore } from '../services/stock';
 
 interface LevelRow {
@@ -14,11 +19,13 @@ interface MovementRow {
   id: string;
   product_id: string;
   warehouse_id: string;
-  type: 'ENTRY';
+  type: MovementType;
   quantity: number;
   unit_cost: string;
   balance_qty: number;
   balance_avg_cost: string;
+  reason: string | null;
+  transfer_id: string | null;
   created_by: string;
   created_at: Date;
 }
@@ -45,6 +52,8 @@ function toMovement(row: MovementRow): StockMovement {
     unitCost: row.unit_cost,
     balanceQty: row.balance_qty,
     balanceAvgCost: row.balance_avg_cost,
+    reason: row.reason,
+    transferId: row.transfer_id,
     createdBy: row.created_by,
     createdAt: row.created_at.toISOString(),
   };
@@ -110,10 +119,11 @@ export function createStockRepository(client: PoolClient): StockStore {
     async insertMovement(m) {
       const { rows } = await client.query<MovementRow>(
         `INSERT INTO stock_movements
-           (product_id, warehouse_id, type, quantity, unit_cost, balance_qty, balance_avg_cost, created_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           (product_id, warehouse_id, type, quantity, unit_cost, balance_qty, balance_avg_cost, created_by,
+            reason, transfer_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id, product_id, warehouse_id, type, quantity, unit_cost, balance_qty,
-                   balance_avg_cost, created_by, created_at`,
+                   balance_avg_cost, reason, transfer_id, created_by, created_at`,
         [
           m.productId,
           m.warehouseId,
@@ -123,6 +133,8 @@ export function createStockRepository(client: PoolClient): StockStore {
           m.balanceQty,
           m.balanceAvgCost,
           m.createdBy,
+          m.reason ?? null,
+          m.transferId ?? null,
         ],
       );
       const row = rows[0];

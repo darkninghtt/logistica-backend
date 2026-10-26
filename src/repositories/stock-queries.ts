@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
-import { totalValue } from '../domain/stock';
+import { totalValue, type MovementType } from '../domain/stock';
 import type { StockLevelItem, StockMovementItem } from '../domain/stock-queries';
 import type { StockQueryStore } from '../services/stock-queries';
 
@@ -17,11 +17,13 @@ interface MovementRow {
   id: string;
   product_id: string;
   warehouse_id: string;
-  type: 'ENTRY';
+  type: MovementType;
   quantity: number;
   unit_cost: string;
   balance_qty: number;
   balance_avg_cost: string;
+  reason: string | null;
+  transfer_id: string | null;
   created_by: string;
   created_at: Date;
   sku: string;
@@ -51,6 +53,8 @@ function toMovementItem(row: MovementRow): StockMovementItem {
     unitCost: row.unit_cost,
     balanceQty: row.balance_qty,
     balanceAvgCost: row.balance_avg_cost,
+    reason: row.reason,
+    transferId: row.transfer_id,
     createdBy: row.created_by,
     createdAt: row.created_at.toISOString(),
     productSku: row.sku,
@@ -92,7 +96,7 @@ export function createStockQueryRepository(db: Pool | PoolClient): StockQuerySto
       // `$2::uuid IS NULL` deja el filtro por producto como opcional con una sola consulta
       const { rows } = await db.query<MovementRow>(
         `SELECT m.id, m.product_id, m.warehouse_id, m.type, m.quantity, m.unit_cost,
-                m.balance_qty, m.balance_avg_cost, m.created_by, m.created_at, p.sku, p.name
+                m.balance_qty, m.balance_avg_cost, m.reason, m.transfer_id, m.created_by, m.created_at, p.sku, p.name
          FROM stock_movements m
          JOIN products p ON p.id = m.product_id
          WHERE m.warehouse_id = $1 AND ($2::uuid IS NULL OR m.product_id = $2::uuid)

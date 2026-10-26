@@ -39,6 +39,8 @@ export function withoutMovementCosts(movement: StockMovementItem): StockMovement
     type: movement.type,
     quantity: movement.quantity,
     balanceQty: movement.balanceQty,
+    reason: movement.reason,
+    transferId: movement.transferId,
     createdBy: movement.createdBy,
     createdAt: movement.createdAt,
     productSku: movement.productSku,
