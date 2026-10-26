@@ -1,5 +1,5 @@
 import { Decimal } from 'decimal.js';
-import { ValidationError } from './errors';
+import { ConflictError, ValidationError } from './errors';
 
 // Decimal propio: precisión de sobra y redondeo "half up" (el de la contabilidad), sin tocar el global
 const Money = Decimal.clone({ precision: 40, rounding: Decimal.ROUND_HALF_UP });
@@ -51,6 +51,36 @@ export function applyEntry(current: StockBalance, entry: StockEntry): StockBalan
   return { quantity, avgCost: totalValue.div(quantity).toFixed(COST_SCALE) };
 }
 
+/**
+ * Merma de bodega: descuenta stock al costo vigente. Una salida no recalcula el CPP, así que
+ * el costo promedio queda igual. Función pura: no toca la BD.
+ */
+export function applyShrinkage(current: StockBalance, quantity: number): StockBalance {
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    throw new ValidationError('La cantidad de la merma debe ser un entero mayor que 0');
+  }
+  if (quantity > current.quantity) {
+    throw new ConflictError(
+      'No hay stock suficiente en la bodega para registrar la merma',
+      'INSUFFICIENT_STOCK',
+    );
+  }
+  return { quantity: current.quantity - quantity, avgCost: current.avgCost };
+}
+
+/** Motivos de una merma de bodega. */
+export const SHRINKAGE_REASONS = ['DAMAGE', 'EXPIRED', 'THEFT', 'COUNT_ADJUSTMENT'] as const;
+
+export type ShrinkageReason = (typeof SHRINKAGE_REASONS)[number];
+
+/**
+ * Texto que queda en la columna `reason` del libro: el código del motivo y, si hay nota,
+ * "CÓDIGO: nota". El código siempre va antes del primer ": ".
+ */
+export function shrinkageReasonText(reason: ShrinkageReason, note?: string): string {
+  return note ? `${reason}: ${note}` : reason;
+}
+
 /** Valor total del stock (cantidad × costo promedio), como string con 4 decimales. */
 export function totalValue(balance: StockBalance): string {
   return new Money(balance.avgCost).times(balance.quantity).toFixed(COST_SCALE);
@@ -92,4 +122,34 @@ export interface StockMovement {
   transferId: string | null;
   createdBy: string;
   createdAt: string;
+}
+
+/** Movimiento sin campos de costo: lo que recibe el OPERATOR. */
+export type StockMovementNoCost = Omit<StockMovement, 'unitCost' | 'balanceAvgCost'>;
+
+/** Nivel sin campos de costo: lo que recibe el OPERATOR. */
+export type StockLevelNoCost = Omit<StockLevel, 'avgCost' | 'totalValue'>;
+
+/** Copia explícita de los campos permitidos: un campo de costo nuevo no se filtra por descuido. */
+export function movementWithoutCosts(movement: StockMovement): StockMovementNoCost {
+  return {
+    id: movement.id,
+    productId: movement.productId,
+    warehouseId: movement.warehouseId,
+    type: movement.type,
+    quantity: movement.quantity,
+    balanceQty: movement.balanceQty,
+    reason: movement.reason,
+    transferId: movement.transferId,
+    createdBy: movement.createdBy,
+    createdAt: movement.createdAt,
+  };
+}
+
+export function levelWithoutCosts(level: StockLevel): StockLevelNoCost {
+  return {
+    productId: level.productId,
+    warehouseId: level.warehouseId,
+    quantity: level.quantity,
+  };
 }
