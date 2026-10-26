@@ -48,9 +48,67 @@ import { requireRole } from '../middlewares/require-role';
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ * /api/stock/shrinkage:
+ *   post:
+ *     tags: [Stock]
+ *     summary: Registra una merma de bodega (daño, vencimiento, robo o ajuste de conteo)
+ *     description: >
+ *       Descuenta stock al costo promedio vigente y deja un movimiento `SHRINKAGE` en el libro. No
+ *       cambia el CPP y no puede dejar el stock negativo. Todo ocurre en una transacción con el
+ *       nivel de stock bloqueado. El motivo queda en `reason` del movimiento (el código y, si hay
+ *       nota, "CÓDIGO: nota"). WAREHOUSE_MANAGER y OPERATOR, solo en sus bodegas asignadas; el
+ *       OPERATOR no recibe campos de costo en la respuesta.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/StockShrinkageInput'
+ *     responses:
+ *       201:
+ *         description: Merma registrada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StockEntryResponse'
+ *       400:
+ *         description: Datos inválidos (cantidad, motivo o identificadores)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Token ausente, inválido o expirado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Solo el WAREHOUSE_MANAGER y el OPERATOR, y únicamente en sus bodegas asignadas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: El producto no existe
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: Stock insuficiente (`INSUFFICIENT_STOCK`); no se cambia nada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 export function createStockRouter(controller: StockController): Router {
   const router = Router();
   router.post('/entries', requireRole('ADMIN', 'WAREHOUSE_MANAGER'), controller.createEntry);
+  router.post(
+    '/shrinkage',
+    requireRole('WAREHOUSE_MANAGER', 'OPERATOR'),
+    controller.createShrinkage,
+  );
   return router;
 }

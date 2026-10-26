@@ -1,6 +1,6 @@
 import path from 'node:path';
 import swaggerJsdoc from 'swagger-jsdoc';
-import { MOVEMENT_TYPES } from './domain/stock';
+import { MOVEMENT_TYPES, SHRINKAGE_REASONS } from './domain/stock';
 import { TRANSFER_STATUSES } from './domain/transfer';
 import { ROLES } from './domain/user';
 
@@ -190,6 +190,17 @@ export function buildOpenApiSpec(): object {
                 description: 'Costo unitario mayor que 0, con hasta 4 decimales (como texto)',
                 example: '100.0000',
               },
+            },
+          },
+          StockShrinkageInput: {
+            type: 'object',
+            required: ['warehouseId', 'productId', 'quantity', 'reason'],
+            properties: {
+              warehouseId: { type: 'string', format: 'uuid' },
+              productId: { type: 'string', format: 'uuid' },
+              quantity: { type: 'integer', minimum: 1, maximum: 1000000000, example: 2 },
+              reason: { type: 'string', enum: [...SHRINKAGE_REASONS], example: 'DAMAGE' },
+              note: { type: 'string', maxLength: 500, example: 'Caja mojada en el traslado' },
             },
           },
           StockLevel: {
