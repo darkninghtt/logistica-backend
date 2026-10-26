@@ -102,3 +102,72 @@ export function computeReceipt(
   const matches = items.every((item) => item.shortfall === 0 && item.surplus === 0);
   return { items, status: matches ? 'RECEIVED' : 'DISCREPANCY' };
 }
+
+/** Bodega tal como se muestra dentro de un traspaso. */
+export interface WarehouseRef {
+  id: string;
+  code: string;
+  name: string;
+}
+
+/** Fila del listado de traspasos. */
+export interface TransferSummary {
+  id: string;
+  status: TransferStatus;
+  origin: WarehouseRef;
+  destination: WarehouseRef;
+  itemCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TransferItemView {
+  productId: string;
+  productSku: string;
+  productName: string;
+  quantitySent: number;
+  /** null hasta que el destino declara la recepción. */
+  quantityReceived: number | null;
+  /** Costo congelado al despachar; null mientras es borrador. */
+  unitCost: string | null;
+}
+
+export interface TransferEventView {
+  fromStatus: TransferStatus | null;
+  toStatus: TransferStatus;
+  actor: { id: string; name: string };
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface TransferDetail extends Omit<TransferSummary, 'itemCount'> {
+  note: string | null;
+  createdBy: string;
+  dispatchedBy: string | null;
+  dispatchedAt: string | null;
+  receivedBy: string | null;
+  receivedAt: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  items: TransferItemView[];
+  events: TransferEventView[];
+}
+
+export type TransferItemViewNoCost = Omit<TransferItemView, 'unitCost'>;
+export type TransferDetailNoCost = Omit<TransferDetail, 'items'> & {
+  items: TransferItemViewNoCost[];
+};
+
+/** Detalle sin costos: lo que recibe el OPERATOR. Copia explícita para que un campo nuevo no se filtre. */
+export function withoutTransferCosts(detail: TransferDetail): TransferDetailNoCost {
+  return {
+    ...detail,
+    items: detail.items.map((item) => ({
+      productId: item.productId,
+      productSku: item.productSku,
+      productName: item.productName,
+      quantitySent: item.quantitySent,
+      quantityReceived: item.quantityReceived,
+    })),
+  };
+}
