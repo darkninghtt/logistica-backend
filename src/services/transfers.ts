@@ -1,9 +1,10 @@
 import { assertRole, type Actor } from '../domain/authorization';
 import { ConflictError, ForbiddenError, NotFoundError } from '../domain/errors';
 import type { Page } from '../domain/page';
-import type { StockBalance } from '../domain/stock';
+import { applyEntry, type StockBalance } from '../domain/stock';
 import {
   assertTransition,
+  computeReceipt,
   withoutTransferCosts,
   type TransferDetail,
   type TransferDetailNoCost,
@@ -14,6 +15,8 @@ import type {
   CancelTransferInput,
   CreateTransferInput,
   ListTransfersQuery,
+  ReceiveTransferInput,
+  ResolveTransferInput,
 } from '../schemas/transfers';
 import type { StockStore } from './stock';
 import type { WarehouseAccess } from './warehouse-access';
@@ -25,11 +28,17 @@ export interface TransferHead {
   originId: string;
   destinationId: string;
   createdBy: string;
+  /** Quién declaró la recepción; null hasta que el destino recibe. */
+  receivedBy: string | null;
 }
 
 export interface TransferItemRow {
   productId: string;
   quantitySent: number;
+  /** Costo congelado al despachar; null mientras es borrador. */
+  unitCost: string | null;
+  /** Lo que declaró el destino; null hasta que recibe. */
+  quantityReceived: number | null;
 }
 
 export interface TransferFilter {
@@ -77,6 +86,8 @@ export interface TransferWriteStore {
   /** Ítems del traspaso ordenados por product_id (el orden de bloqueo del stock). */
   listItems(transferId: string): Promise<TransferItemRow[]>;
   freezeItemCost(transferId: string, productId: string, unitCost: string): Promise<void>;
+  /** Guarda lo que el destino declaró recibir de un ítem. */
+  setReceivedQuantity(transferId: string, productId: string, quantity: number): Promise<void>;
 }
 
 /** Todo lo que corre dentro de la misma transacción. */
@@ -93,6 +104,8 @@ export interface TransfersService {
   get(id: string, actor: Actor): Promise<TransferView>;
   cancel(id: string, input: CancelTransferInput, actor: Actor): Promise<TransferView>;
   dispatch(id: string, actor: Actor): Promise<TransferView>;
+  receive(id: string, input: ReceiveTransferInput, actor: Actor): Promise<TransferView>;
+  resolve(id: string, input: ResolveTransferInput, actor: Actor): Promise<TransferView>;
 }
 
 export interface TransfersDeps {
@@ -103,6 +116,8 @@ export interface TransfersDeps {
 
 const CREATE_ROLES = ['WAREHOUSE_MANAGER', 'OPERATOR'] as const;
 const DISPATCH_ROLES = ['WAREHOUSE_MANAGER'] as const;
+const RECEIVE_ROLES = ['WAREHOUSE_MANAGER', 'OPERATOR'] as const;
+const RESOLVE_ROLES = ['ADMIN', 'WAREHOUSE_MANAGER'] as const;
 /** El OPERATOR no recibe costos (se quitan aquí, no en la interfaz). */
 const ROLE_WITHOUT_COSTS = 'OPERATOR';
 
@@ -129,6 +144,51 @@ export async function moveStatus(
     );
   }
   await tx.transfers.insertEvent({ transferId, fromStatus: from, toStatus: to, actorId, reason });
+}
+
+interface FrozenCostEntry {
+  transferId: string;
+  warehouseId: string;
+  productId: string;
+  quantity: number;
+  /** Costo congelado del ítem al despachar. */
+  unitCost: string | null;
+  type: 'TRANSFER_IN' | 'ADJUSTMENT_IN';
+  actorId: string;
+  reason?: string;
+}
+
+/**
+ * Entra stock a una bodega al costo congelado del traspaso y recalcula su CPP (función pura
+ * `applyEntry`). Bloquea la fila de stock: quien llama debe recorrer los productos en orden.
+ */
+async function enterAtFrozenCost(stock: StockStore, entry: FrozenCostEntry): Promise<void> {
+  if (entry.unitCost === null) {
+    throw new Error('Un ítem despachado debería tener el costo congelado');
+  }
+  await stock.ensureLevel(entry.productId, entry.warehouseId);
+  const current = await stock.lockLevel(entry.productId, entry.warehouseId);
+  const next = applyEntry(current, { quantity: entry.quantity, unitCost: entry.unitCost });
+  await stock.saveLevel(entry.productId, entry.warehouseId, next);
+  await stock.insertMovement({
+    productId: entry.productId,
+    warehouseId: entry.warehouseId,
+    type: entry.type,
+    quantity: entry.quantity,
+    unitCost: entry.unitCost,
+    balanceQty: next.quantity,
+    balanceAvgCost: next.avgCost,
+    createdBy: entry.actorId,
+    reason: entry.reason,
+    transferId: entry.transferId,
+  });
+}
+
+/** Separación de funciones: quien recibió el traspaso no puede resolver su discrepancia. */
+function assertNotReceiver(receivedBy: string | null, actor: Actor): void {
+  if (receivedBy === actor.userId) {
+    throw new ForbiddenError('Quien recibió el traspaso no puede resolver su discrepancia');
+  }
 }
 
 export function createTransfersService({
@@ -245,6 +305,89 @@ export function createTransfersService({
             transferId: id,
           });
           await tx.transfers.freezeItemCost(id, item.productId, current.avgCost);
+        }
+      });
+      return detailFor(id, actor);
+    },
+
+    async receive(id, input, actor) {
+      assertRole(actor, RECEIVE_ROLES);
+      const head = await requireHead(id);
+      await access.assert(actor, head.destinationId);
+      await runInTransaction(async (tx) => {
+        // Los ítems no cambian después del borrador; la declaración se valida antes de tocar nada
+        const items = await tx.transfers.listItems(id);
+        const receipt = computeReceipt(items, input.items);
+
+        // 1) La fila del traspaso: una recepción repetida se detiene aquí con 409
+        await moveStatus(tx, store, id, 'IN_TRANSIT', receipt.status, actor.userId);
+
+        // 2) El stock del destino, por product_id (el mismo orden de bloqueo que al despachar)
+        for (const line of receipt.items) {
+          await tx.transfers.setReceivedQuantity(id, line.productId, line.quantityReceived);
+          // Entra min(recibido, enviado); un sobrante queda retenido hasta resolver
+          if (line.entering === 0) continue;
+          await enterAtFrozenCost(tx.stock, {
+            transferId: id,
+            warehouseId: head.destinationId,
+            productId: line.productId,
+            quantity: line.entering,
+            unitCost: items.find((item) => item.productId === line.productId)?.unitCost ?? null,
+            type: 'TRANSFER_IN',
+            actorId: actor.userId,
+          });
+        }
+      });
+      return detailFor(id, actor);
+    },
+
+    async resolve(id, input, actor) {
+      assertRole(actor, RESOLVE_ROLES);
+      const head = await requireHead(id);
+      await assertCanView(head, actor);
+      assertNotReceiver(head.receivedBy, actor);
+      await runInTransaction(async (tx) => {
+        await moveStatus(tx, store, id, 'DISCREPANCY', 'RESOLVED', actor.userId, input.reason);
+        // Se vuelve a comprobar con el estado ya bloqueado: si el traspaso se recibió justo después
+        // de leerlo arriba, la persona que recibió igual no puede resolverlo
+        assertNotReceiver((await store.findHead(id))?.receivedBy ?? null, actor);
+
+        for (const item of await tx.transfers.listItems(id)) {
+          if (item.quantityReceived === null) {
+            throw new Error('Un traspaso con discrepancia debería tener las cantidades recibidas');
+          }
+          const shortfall = item.quantitySent - item.quantityReceived;
+          const surplus = item.quantityReceived - item.quantitySent;
+          if (shortfall > 0) {
+            // Merma en tránsito: la mercancía ya salió del origen y nunca llegó. No mueve el stock
+            // de ninguna bodega, así que el libro guarda el saldo y el costo del destino sin cambios
+            await tx.stock.ensureLevel(item.productId, head.destinationId);
+            const current = await tx.stock.lockLevel(item.productId, head.destinationId);
+            await tx.stock.insertMovement({
+              productId: item.productId,
+              warehouseId: head.destinationId,
+              type: 'TRANSIT_SHRINKAGE',
+              quantity: shortfall,
+              unitCost: item.unitCost ?? current.avgCost,
+              balanceQty: current.quantity,
+              balanceAvgCost: current.avgCost,
+              createdBy: actor.userId,
+              reason: input.reason,
+              transferId: id,
+            });
+          } else if (surplus > 0) {
+            // El sobrante entra al destino como ajuste, al costo congelado
+            await enterAtFrozenCost(tx.stock, {
+              transferId: id,
+              warehouseId: head.destinationId,
+              productId: item.productId,
+              quantity: surplus,
+              unitCost: item.unitCost,
+              type: 'ADJUSTMENT_IN',
+              actorId: actor.userId,
+              reason: input.reason,
+            });
+          }
         }
       });
       return detailFor(id, actor);
