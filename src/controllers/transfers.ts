@@ -6,6 +6,8 @@ import {
   cancelTransferBodySchema,
   createTransferBodySchema,
   listTransfersQuerySchema,
+  receiveTransferBodySchema,
+  resolveTransferBodySchema,
 } from '../schemas/transfers';
 import type { TransfersService } from '../services/transfers';
 
@@ -15,6 +17,8 @@ export interface TransfersController {
   get: RequestHandler;
   cancel: RequestHandler;
   dispatch: RequestHandler;
+  receive: RequestHandler;
+  resolve: RequestHandler;
 }
 
 /** Solo HTTP: valida la entrada, llama al servicio y responde. */
@@ -44,6 +48,18 @@ export function createTransfersController(service: TransfersService): TransfersC
     async dispatch(req, res) {
       const { id } = parseWith(idParamSchema, req.params);
       res.json(await service.dispatch(id, getActor(req)));
+    },
+
+    async receive(req, res) {
+      const { id } = parseWith(idParamSchema, req.params);
+      const input = parseWith(receiveTransferBodySchema, req.body);
+      res.json(await service.receive(id, input, getActor(req)));
+    },
+
+    async resolve(req, res) {
+      const { id } = parseWith(idParamSchema, req.params);
+      const input = parseWith(resolveTransferBodySchema, req.body);
+      res.json(await service.resolve(id, input, getActor(req)));
     },
   };
 }

@@ -191,8 +191,9 @@ export function createTransfersReadRepository(db: Pool | PoolClient): TransferRe
         origin_warehouse_id: string;
         destination_warehouse_id: string;
         created_by: string;
+        received_by: string | null;
       }>(
-        `SELECT id, status, origin_warehouse_id, destination_warehouse_id, created_by
+        `SELECT id, status, origin_warehouse_id, destination_warehouse_id, created_by, received_by
          FROM transfers WHERE id = $1`,
         [id],
       );
@@ -204,6 +205,7 @@ export function createTransfersReadRepository(db: Pool | PoolClient): TransferRe
         originId: row.origin_warehouse_id,
         destinationId: row.destination_warehouse_id,
         createdBy: row.created_by,
+        receivedBy: row.received_by,
       };
     },
   };
@@ -260,11 +262,29 @@ export function createTransfersWriteRepository(client: PoolClient): TransferWrit
     },
 
     async listItems(transferId) {
-      const { rows } = await client.query<{ product_id: string; quantity_sent: number }>(
-        'SELECT product_id, quantity_sent FROM transfer_items WHERE transfer_id = $1 ORDER BY product_id',
+      const { rows } = await client.query<{
+        product_id: string;
+        quantity_sent: number;
+        unit_cost: string | null;
+        quantity_received: number | null;
+      }>(
+        `SELECT product_id, quantity_sent, unit_cost, quantity_received
+         FROM transfer_items WHERE transfer_id = $1 ORDER BY product_id`,
         [transferId],
       );
-      return rows.map((row) => ({ productId: row.product_id, quantitySent: row.quantity_sent }));
+      return rows.map((row) => ({
+        productId: row.product_id,
+        quantitySent: row.quantity_sent,
+        unitCost: row.unit_cost,
+        quantityReceived: row.quantity_received,
+      }));
+    },
+
+    async setReceivedQuantity(transferId, productId, quantity) {
+      await client.query(
+        'UPDATE transfer_items SET quantity_received = $3 WHERE transfer_id = $1 AND product_id = $2',
+        [transferId, productId, quantity],
+      );
     },
 
     async freezeItemCost(transferId, productId, unitCost) {

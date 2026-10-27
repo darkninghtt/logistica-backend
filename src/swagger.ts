@@ -340,6 +340,42 @@ export function buildOpenApiSpec(): object {
               note: { type: 'string', maxLength: 500 },
             },
           },
+          TransferReceiveInput: {
+            type: 'object',
+            required: ['items'],
+            properties: {
+              items: {
+                type: 'array',
+                minItems: 1,
+                description: 'Todos los productos del traspaso, sin repetir',
+                items: {
+                  type: 'object',
+                  required: ['productId', 'receivedQuantity'],
+                  properties: {
+                    productId: { type: 'string', format: 'uuid' },
+                    receivedQuantity: {
+                      type: 'integer',
+                      minimum: 0,
+                      description: 'Lo que llegó al destino; puede ser 0 o más que lo enviado',
+                      example: 7,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          TransferResolveInput: {
+            type: 'object',
+            required: ['reason'],
+            properties: {
+              reason: {
+                type: 'string',
+                minLength: 1,
+                maxLength: 500,
+                example: 'Se perdió en ruta',
+              },
+            },
+          },
           TransferCancelInput: {
             type: 'object',
             properties: { reason: { type: 'string', maxLength: 500 } },

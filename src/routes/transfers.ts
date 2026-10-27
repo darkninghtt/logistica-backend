@@ -214,6 +214,123 @@ import { requireRole } from '../middlewares/require-role';
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ * /api/transfers/{id}/receive:
+ *   post:
+ *     tags: [Traspasos]
+ *     summary: Recibe un traspaso en tránsito (pasa a RECEIVED o DISCREPANCY)
+ *     description: >
+ *       WAREHOUSE_MANAGER u OPERATOR con la bodega de destino asignada. Hay que declarar la cantidad
+ *       recibida de todos los ítems, sin repetir ni agregar otros. Por ítem entra al destino
+ *       `min(recibido, enviado)` como TRANSFER_IN al costo congelado, con recálculo del CPP del
+ *       destino. Si todo coincide el traspaso queda en RECEIVED; si algo difiere, en DISCREPANCY y
+ *       la diferencia queda retenida (no toca stock ni CPP) hasta resolverla. Repetir la recepción
+ *       responde 409. El OPERATOR no recibe costos en la respuesta.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/TransferReceiveInput'
+ *     responses:
+ *       200:
+ *         description: Traspaso en RECEIVED o DISCREPANCY
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TransferDetail'
+ *       400:
+ *         description: Falta algún ítem, hay uno repetido o ajeno al traspaso, o una cantidad inválida
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Token ausente, inválido o expirado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Rol no permitido (ADMIN y AUDITOR no reciben) o la bodega de destino no está asignada
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: El traspaso no existe
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: INVALID_TRANSITION, el traspaso no está en tránsito (por ejemplo, ya se recibió)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ * /api/transfers/{id}/resolve:
+ *   post:
+ *     tags: [Traspasos]
+ *     summary: Resuelve la discrepancia de un traspaso (pasa a RESOLVED)
+ *     description: >
+ *       ADMIN, o WAREHOUSE_MANAGER con la bodega de origen o de destino asignada. El motivo es
+ *       obligatorio. Quien recibió el traspaso no puede resolverlo (separación de funciones). En una
+ *       transacción, cada faltante se registra como TRANSIT_SHRINKAGE (no mueve el stock de ninguna
+ *       bodega) y cada sobrante entra al destino como ADJUSTMENT_IN con recálculo del CPP, ambos al
+ *       costo congelado y con el motivo y el usuario. La diferencia no vuelve sola al origen.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/TransferResolveInput'
+ *     responses:
+ *       200:
+ *         description: Traspaso en RESOLVED
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TransferDetail'
+ *       400:
+ *         description: Falta el motivo
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Token ausente, inválido o expirado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Rol no permitido, sin bodega del traspaso asignada, o quien resuelve fue quien recibió
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: El traspaso no existe
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: INVALID_TRANSITION, el traspaso no está en DISCREPANCY
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 export function createTransfersRouter(controller: TransfersController): Router {
   const router = Router();
@@ -224,5 +341,7 @@ export function createTransfersRouter(controller: TransfersController): Router {
   router.get('/:id', reader, controller.get);
   router.post('/:id/cancel', creator, controller.cancel);
   router.post('/:id/dispatch', requireRole('WAREHOUSE_MANAGER'), controller.dispatch);
+  router.post('/:id/receive', creator, controller.receive);
+  router.post('/:id/resolve', requireRole('ADMIN', 'WAREHOUSE_MANAGER'), controller.resolve);
   return router;
 }
