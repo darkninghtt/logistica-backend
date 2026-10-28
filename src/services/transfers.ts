@@ -69,6 +69,8 @@ export interface TransferWriteStore {
     createdBy: string;
     items: { productId: string; quantity: number }[];
   }): Promise<string>;
+  /** Lectura dentro de la transacción (misma conexión). */
+  findHead(id: string): Promise<TransferHead | null>;
   /** UPDATE ... WHERE id AND status = from. Devuelve false si el estado ya no era `from`. */
   transition(
     id: string,
@@ -127,7 +129,6 @@ const ROLE_WITHOUT_COSTS = 'OPERATOR';
  */
 export async function moveStatus(
   tx: TransferTx,
-  store: TransferReadStore,
   transferId: string,
   from: TransferStatus,
   to: TransferStatus,
@@ -136,7 +137,8 @@ export async function moveStatus(
 ): Promise<void> {
   assertTransition(from, to);
   if (!(await tx.transfers.transition(transferId, from, to, actorId))) {
-    const current = await store.findHead(transferId);
+    // Se lee con la conexión de la transacción: pedir otra al pool agotaría el pool bajo carga
+    const current = await tx.transfers.findHead(transferId);
     if (!current) throw new NotFoundError('El traspaso no existe');
     throw new ConflictError(
       `El traspaso está en ${current.status} y no se puede pasar a ${to}`,
@@ -264,7 +266,7 @@ export function createTransfersService({
         throw new ForbiddenError('Solo puedes cancelar los traspasos que tú creaste');
       }
       await runInTransaction((tx) =>
-        moveStatus(tx, store, id, 'DRAFT', 'CANCELLED', actor.userId, input.reason ?? null),
+        moveStatus(tx, id, 'DRAFT', 'CANCELLED', actor.userId, input.reason ?? null),
       );
       return detailFor(id, actor);
     },
@@ -275,7 +277,7 @@ export function createTransfersService({
       await access.assert(actor, head.originId);
       await runInTransaction(async (tx) => {
         // 1) La fila del traspaso (UPDATE condicional): un despacho repetido se detiene aquí con 409
-        await moveStatus(tx, store, id, 'DRAFT', 'IN_TRANSIT', actor.userId);
+        await moveStatus(tx, id, 'DRAFT', 'IN_TRANSIT', actor.userId);
 
         // 2) El stock del origen, por product_id: siempre el mismo orden evita deadlocks
         for (const item of await tx.transfers.listItems(id)) {
@@ -320,7 +322,7 @@ export function createTransfersService({
         const receipt = computeReceipt(items, input.items);
 
         // 1) La fila del traspaso: una recepción repetida se detiene aquí con 409
-        await moveStatus(tx, store, id, 'IN_TRANSIT', receipt.status, actor.userId);
+        await moveStatus(tx, id, 'IN_TRANSIT', receipt.status, actor.userId);
 
         // 2) El stock del destino, por product_id (el mismo orden de bloqueo que al despachar)
         for (const line of receipt.items) {
@@ -347,10 +349,10 @@ export function createTransfersService({
       await assertCanView(head, actor);
       assertNotReceiver(head.receivedBy, actor);
       await runInTransaction(async (tx) => {
-        await moveStatus(tx, store, id, 'DISCREPANCY', 'RESOLVED', actor.userId, input.reason);
+        await moveStatus(tx, id, 'DISCREPANCY', 'RESOLVED', actor.userId, input.reason);
         // Se vuelve a comprobar con el estado ya bloqueado: si el traspaso se recibió justo después
         // de leerlo arriba, la persona que recibió igual no puede resolverlo
-        assertNotReceiver((await store.findHead(id))?.receivedBy ?? null, actor);
+        assertNotReceiver((await tx.transfers.findHead(id))?.receivedBy ?? null, actor);
 
         for (const item of await tx.transfers.listItems(id)) {
           if (item.quantityReceived === null) {

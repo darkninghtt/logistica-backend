@@ -1,7 +1,7 @@
 import { createApp } from './app';
 import { loadConfig } from './config';
-import { createPool, withTransaction } from './db';
-import { createLogger } from './logger';
+import { createPool, createTransactionRunner } from './db';
+import { correlationContext, createLogger } from './logger';
 import { createRefreshTokensRepository } from './repositories/refresh-tokens';
 import { createProductsRepository } from './repositories/products';
 import { createStockRepository } from './repositories/stock';
@@ -30,6 +30,13 @@ function main(): void {
 
   // Única composición: aquí se crean las dependencias y se inyectan hacia abajo
   const pool = createPool(config.DATABASE_URL);
+  // Los reintentos ante deadlock se registran con el correlationId de la petición que los provocó
+  const withTransaction = createTransactionRunner(pool, ({ attempt, code, delayMs }) => {
+    logger.warn(
+      { correlationId: correlationContext.getStore(), attempt, code, delayMs },
+      'Transacción reintentada',
+    );
+  });
   const tokens = createTokenService({
     secret: config.JWT_SECRET,
     expiresInSeconds: config.JWT_ACCESS_TTL_SECONDS,
@@ -38,7 +45,7 @@ function main(): void {
   const sessions = createSessionService({
     store: createRefreshTokensRepository(pool),
     runInTransaction: (work) =>
-      withTransaction(pool, (client) => work(createRefreshTokensRepository(client))),
+      withTransaction((client) => work(createRefreshTokensRepository(client))),
     users: usersRepository,
     ttlSeconds: config.REFRESH_TTL_SECONDS,
   });
@@ -58,8 +65,7 @@ function main(): void {
   const productsService = createProductsService({ products: createProductsRepository(pool) });
   const stockService = createStockService({
     access,
-    runInTransaction: (work) =>
-      withTransaction(pool, (client) => work(createStockRepository(client))),
+    runInTransaction: (work) => withTransaction((client) => work(createStockRepository(client))),
   });
   const stockQueryService = createStockQueryService({
     store: createStockQueryRepository(pool),
@@ -68,7 +74,7 @@ function main(): void {
   const transfersService = createTransfersService({
     store: createTransfersReadRepository(pool),
     runInTransaction: (work) =>
-      withTransaction(pool, (client) =>
+      withTransaction((client) =>
         work({
           transfers: createTransfersWriteRepository(client),
           stock: createStockRepository(client),

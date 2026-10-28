@@ -214,6 +214,8 @@ export function createTransfersReadRepository(db: Pool | PoolClient): TransferRe
 /** Escritura: recibe el cliente de la transacción, así todo lo que haga queda dentro de ella. */
 export function createTransfersWriteRepository(client: PoolClient): TransferWriteStore {
   return {
+    findHead: createTransfersReadRepository(client).findHead,
+
     async insertTransfer(input) {
       try {
         const { rows } = await client.query<{ id: string }>(

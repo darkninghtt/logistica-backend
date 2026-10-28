@@ -30,9 +30,13 @@ function head(receivedBy: string | null): TransferHead {
   };
 }
 
-function fakeTx(): { tx: TransferTx; transition: ReturnType<typeof vi.fn> } {
+function fakeTx(findHead: TransferWriteStore['findHead']): {
+  tx: TransferTx;
+  transition: ReturnType<typeof vi.fn>;
+} {
   const transition = vi.fn(async () => true);
   const transfers: TransferWriteStore = {
+    findHead,
     insertTransfer: vi.fn(async () => TRANSFER),
     transition,
     insertEvent: vi.fn(async () => undefined),
@@ -63,8 +67,9 @@ function fakeTx(): { tx: TransferTx; transition: ReturnType<typeof vi.fn> } {
 }
 
 function serviceWith(heads: (TransferHead | null)[]) {
-  const { tx, transition } = fakeTx();
+  // Una sola cola de lecturas: dentro y fuera de la transacción salen en el orden en que se piden
   const findHead = vi.fn(async () => heads.shift() ?? null);
+  const { tx, transition } = fakeTx(findHead);
   const store: TransferReadStore = {
     list: vi.fn(async () => ({ rows: [], total: 0 })),
     findDetail: vi.fn(async () => null),
