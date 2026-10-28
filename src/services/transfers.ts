@@ -4,6 +4,7 @@ import type { Page } from '../domain/page';
 import { applyEntry, type StockBalance } from '../domain/stock';
 import {
   assertTransition,
+  STATUS_LABELS,
   computeReceipt,
   withoutTransferCosts,
   type TransferDetail,
@@ -57,6 +58,8 @@ export interface TransferReadStore {
   ): Promise<{ rows: TransferSummary[]; total: number }>;
   findDetail(id: string): Promise<TransferDetail | null>;
   findHead(id: string): Promise<TransferHead | null>;
+  /** De las bodegas indicadas, las que existen pero están inactivas. */
+  inactiveWarehouseIds(ids: string[]): Promise<string[]>;
 }
 
 /** Escritura de traspasos: siempre dentro de una transacción. */
@@ -141,7 +144,7 @@ export async function moveStatus(
     const current = await tx.transfers.findHead(transferId);
     if (!current) throw new NotFoundError('El traspaso no existe');
     throw new ConflictError(
-      `El traspaso está en ${current.status} y no se puede pasar a ${to}`,
+      `El traspaso está ${STATUS_LABELS[current.status]} y no admite esta acción`,
       'INVALID_TRANSITION',
     );
   }
@@ -222,6 +225,17 @@ export function createTransfersService({
     async create(input, actor) {
       assertRole(actor, CREATE_ROLES);
       await access.assert(actor, input.originWarehouseId);
+      // Una bodega desactivada ya no opera: no puede despachar ni recibir traspasos nuevos
+      const inactive = await store.inactiveWarehouseIds([
+        input.originWarehouseId,
+        input.destinationWarehouseId,
+      ]);
+      if (inactive.includes(input.originWarehouseId)) {
+        throw new ConflictError('La bodega de origen está inactiva');
+      }
+      if (inactive.includes(input.destinationWarehouseId)) {
+        throw new ConflictError('La bodega de destino está inactiva');
+      }
       const id = await runInTransaction(async (tx) => {
         const transferId = await tx.transfers.insertTransfer({
           originId: input.originWarehouseId,

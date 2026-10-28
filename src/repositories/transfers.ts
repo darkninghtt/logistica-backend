@@ -184,6 +184,14 @@ export function createTransfersReadRepository(db: Pool | PoolClient): TransferRe
       } satisfies TransferDetail;
     },
 
+    async inactiveWarehouseIds(ids) {
+      const { rows } = await db.query<{ id: string }>(
+        'SELECT id FROM warehouses WHERE id = ANY($1::uuid[]) AND NOT active',
+        [ids],
+      );
+      return rows.map((row) => row.id);
+    },
+
     async findHead(id): Promise<TransferHead | null> {
       const { rows } = await db.query<{
         id: string;
