@@ -1,5 +1,7 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { RequestHandler } from 'express';
 import pino, { type DestinationStream, type Logger } from 'pino';
 import pinoHttp, { type HttpLogger } from 'pino-http';
 import type { Config } from './config';
@@ -40,3 +42,11 @@ export function createHttpLogger(logger: Logger): HttpLogger {
     customProps: (req) => ({ correlationId: req.id }),
   });
 }
+
+/** Correlation id de la petición en curso: permite registrarlo desde capas que no ven `req`. */
+export const correlationContext = new AsyncLocalStorage<string>();
+
+/** Va después del logger HTTP: ejecuta el resto de la petición con su correlation id disponible. */
+export const bindCorrelationId: RequestHandler = (req, _res, next) => {
+  correlationContext.run(String(req.id), next);
+};

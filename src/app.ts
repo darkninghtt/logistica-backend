@@ -8,7 +8,7 @@ import { createStockQueryController } from './controllers/stock-queries';
 import { createTransfersController } from './controllers/transfers';
 import { createUsersController } from './controllers/users';
 import { createWarehousesController } from './controllers/warehouses';
-import { createHttpLogger } from './logger';
+import { bindCorrelationId, createHttpLogger } from './logger';
 import { createGeneralLimiter, createAuthLimiter, type RateLimits } from './middlewares/rate-limit';
 import { createFrontendHandlers } from './middlewares/frontend';
 import { createAuthenticate } from './middlewares/authenticate';
@@ -73,6 +73,7 @@ export function createApp({
   app.disable('x-powered-by');
   if (trustProxy > 0) app.set('trust proxy', trustProxy);
   app.use(createHttpLogger(logger));
+  app.use(bindCorrelationId);
   app.use(express.json());
 
   // Públicos
