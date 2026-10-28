@@ -138,6 +138,13 @@ export function buildOpenApiSpec(): object {
               active: { type: 'boolean', default: true },
             },
           },
+          WarehouseDestinationList: {
+            type: 'object',
+            required: ['data'],
+            properties: {
+              data: { type: 'array', items: { $ref: '#/components/schemas/TransferWarehouseRef' } },
+            },
+          },
           WarehousePage: {
             type: 'object',
             required: ['data', 'page', 'pageSize', 'total'],

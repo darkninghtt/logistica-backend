@@ -4,6 +4,27 @@ import { requireRole } from '../middlewares/require-role';
 
 /**
  * @openapi
+ * /api/warehouses/destinations:
+ *   get:
+ *     tags: [Bodegas]
+ *     summary: Bodegas activas que se pueden elegir como destino de un traspaso
+ *     description: >
+ *       Cualquier usuario autenticado recibe todas las bodegas activas (id, código y nombre), no solo
+ *       las asignadas: quien crea un traspaso necesita elegir una bodega de otra persona como destino.
+ *       Sin paginación, ordenadas por código.
+ *     responses:
+ *       200:
+ *         description: Bodegas activas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/WarehouseDestinationList'
+ *       401:
+ *         description: Token ausente, inválido o expirado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  * /api/warehouses:
  *   get:
  *     tags: [Bodegas]
@@ -131,6 +152,7 @@ import { requireRole } from '../middlewares/require-role';
 export function createWarehousesRouter(controller: WarehousesController): Router {
   const router = Router();
   router.get('/', controller.list);
+  router.get('/destinations', controller.listDestinations);
   router.post('/', requireRole('ADMIN'), controller.create);
   router.put('/:id', requireRole('ADMIN'), controller.update);
   return router;

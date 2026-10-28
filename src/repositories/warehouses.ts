@@ -51,6 +51,13 @@ export function createWarehousesRepository(db: Pool | PoolClient): WarehouseStor
       return { rows: rows.map(toWarehouse), total: Number(count.rows[0]?.total ?? 0) };
     },
 
+    async listActive() {
+      const { rows } = await db.query<WarehouseRow>(
+        `SELECT ${COLUMNS} FROM warehouses WHERE active ORDER BY lower(code)`,
+      );
+      return rows.map(({ id, code, name }) => ({ id, code, name }));
+    },
+
     async insert(input) {
       try {
         const { rows } = await db.query<WarehouseRow>(

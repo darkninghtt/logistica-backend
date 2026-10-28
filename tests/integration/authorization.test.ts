@@ -230,6 +230,35 @@ describe('GET /api/stock y /api/stock/movements', () => {
   });
 });
 
+describe('GET /api/warehouses/destinations', () => {
+  it.each(['ADMIN', 'WAREHOUSE_MANAGER', 'OPERATOR', 'AUDITOR'] as const)(
+    '%s recibe todas las bodegas activas aunque no las tenga asignadas',
+    async (role) => {
+      const res = await request(app).get('/api/warehouses/destinations').set(as(role));
+      expect(res.status).toBe(200);
+      expect(res.body.data).toEqual([
+        { id: warehouseA, code: 'A', name: 'Bodega A' },
+        { id: warehouseB, code: 'B', name: 'Bodega B' },
+      ]);
+    },
+  );
+
+  it('no incluye las bodegas inactivas', async () => {
+    await request(app)
+      .put(`/api/warehouses/${warehouseB}`)
+      .set(as('ADMIN'))
+      .send({ code: 'B', name: 'Bodega B', active: false })
+      .expect(200);
+    const res = await request(app).get('/api/warehouses/destinations').set(as('OPERATOR'));
+    expect(res.body.data.map((w: { id: string }) => w.id)).toEqual([warehouseA]);
+  });
+
+  it('pide autenticación', async () => {
+    const res = await request(app).get('/api/warehouses/destinations');
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('GET /api/warehouses', () => {
   it.each(['ADMIN', 'AUDITOR'] as const)('%s ve todas las bodegas', async (role) => {
     const res = await request(app).get('/api/warehouses').set(as(role));

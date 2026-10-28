@@ -7,6 +7,7 @@ import type { WarehousesService } from '../services/warehouses';
 
 export interface WarehousesController {
   list: RequestHandler;
+  listDestinations: RequestHandler;
   create: RequestHandler;
   update: RequestHandler;
 }
@@ -16,6 +17,10 @@ export function createWarehousesController(service: WarehousesService): Warehous
   return {
     async list(req, res) {
       res.json(await service.list(parseWith(pageQuerySchema, req.query), getActor(req)));
+    },
+
+    async listDestinations(_req, res) {
+      res.json(await service.listDestinations());
     },
 
     async create(req, res) {
