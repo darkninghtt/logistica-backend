@@ -51,7 +51,7 @@ afterAll(async () => {
 });
 
 describe('seed contra la BD', () => {
-  it('deja un usuario de cada rol y asigna bodegas al jefe y al operario', async () => {
+  it('deja un usuario de cada rol y asigna las dos bodegas al jefe y al operario', async () => {
     await runSeed();
 
     const { rows } = await pool.query<{ role: string }>('SELECT role FROM users ORDER BY role');
@@ -61,12 +61,34 @@ describe('seed contra la BD', () => {
     const assigned = await pool.query<{ role: string; code: string }>(
       `SELECT u.role, w.code FROM user_warehouses uw
        JOIN users u ON u.id = uw.user_id JOIN warehouses w ON w.id = uw.warehouse_id
-       ORDER BY u.role`,
+       ORDER BY u.role, w.code`,
     );
     expect(assigned.rows).toEqual([
       { role: 'OPERATOR', code: 'BOD-A' },
+      { role: 'OPERATOR', code: 'BOD-B' },
       { role: 'WAREHOUSE_MANAGER', code: 'BOD-A' },
+      { role: 'WAREHOUSE_MANAGER', code: 'BOD-B' },
     ]);
+  });
+
+  it('a un usuario que ya existía con una sola bodega le agrega la que falta', async () => {
+    await runSeed();
+    // Como quedó la nube con el seed anterior: el jefe solo con BOD-A
+    await pool.query(
+      `DELETE FROM user_warehouses
+       WHERE warehouse_id = (SELECT id FROM warehouses WHERE code = 'BOD-B')
+         AND user_id = (SELECT id FROM users WHERE role = 'WAREHOUSE_MANAGER')`,
+    );
+
+    const second = await runSeed();
+
+    expect(second.createdUsers).toEqual([]);
+    const { rows } = await pool.query<{ code: string }>(
+      `SELECT w.code FROM user_warehouses uw
+       JOIN users u ON u.id = uw.user_id JOIN warehouses w ON w.id = uw.warehouse_id
+       WHERE u.role = 'WAREHOUSE_MANAGER' ORDER BY w.code`,
+    );
+    expect(rows.map((r) => r.code)).toEqual(['BOD-A', 'BOD-B']);
   });
 
   it('correrlo dos veces no duplica nada', async () => {
@@ -77,6 +99,6 @@ describe('seed contra la BD', () => {
     expect(second.existingUsers).toHaveLength(4);
     expect(await count('users')).toBe(4);
     expect(await count('warehouses')).toBe(2);
-    expect(await count('user_warehouses')).toBe(2);
+    expect(await count('user_warehouses')).toBe(4);
   });
 });
