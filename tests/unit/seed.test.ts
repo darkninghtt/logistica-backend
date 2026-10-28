@@ -28,8 +28,12 @@ describe('buildSeedPlan', () => {
     expect(plan.warehouses.map((w) => w.code)).toEqual(['BOD-A', 'BOD-B']);
     expect(plan.users.find((u) => u.role === 'WAREHOUSE_MANAGER')?.warehouseCodes).toEqual([
       'BOD-A',
+      'BOD-B',
     ]);
-    expect(plan.users.find((u) => u.role === 'OPERATOR')?.warehouseCodes).toEqual(['BOD-A']);
+    expect(plan.users.find((u) => u.role === 'OPERATOR')?.warehouseCodes).toEqual([
+      'BOD-A',
+      'BOD-B',
+    ]);
     expect(plan.users.find((u) => u.role === 'AUDITOR')?.warehouseCodes).toEqual([]);
   });
 
@@ -96,8 +100,14 @@ describe('SeedService', () => {
 
     expect(result.createdUsers).toHaveLength(4);
     expect(result.existingUsers).toEqual([]);
-    expect(deps.addWarehouses).toHaveBeenCalledWith('id:jefe@logistica.local', ['w:BOD-A']);
-    expect(deps.addWarehouses).toHaveBeenCalledWith('id:operario@logistica.local', ['w:BOD-A']);
+    expect(deps.addWarehouses).toHaveBeenCalledWith('id:jefe@logistica.local', [
+      'w:BOD-A',
+      'w:BOD-B',
+    ]);
+    expect(deps.addWarehouses).toHaveBeenCalledWith('id:operario@logistica.local', [
+      'w:BOD-A',
+      'w:BOD-B',
+    ]);
     expect(deps.addWarehouses).toHaveBeenCalledTimes(2);
   });
 

@@ -61,7 +61,11 @@ export function createSeedService(deps: SeedDeps): SeedService {
   };
 }
 
-/** Roles que se siembran además del ADMIN, con el prefijo de sus variables y sus bodegas de ejemplo. */
+/**
+ * Roles que se siembran además del ADMIN, con el prefijo de sus variables y sus bodegas de ejemplo.
+ * El jefe y el operario tienen las dos bodegas para poder recorrer un traspaso completo (origen y
+ * destino) en la demo.
+ */
 export const DEMO_ROLES: ReadonlyArray<{
   role: Exclude<Role, 'ADMIN'>;
   envPrefix: string;
@@ -72,9 +76,14 @@ export const DEMO_ROLES: ReadonlyArray<{
     role: 'WAREHOUSE_MANAGER',
     envPrefix: 'SEED_MANAGER',
     name: 'Jefe de bodega',
-    warehouseCodes: ['BOD-A'],
+    warehouseCodes: ['BOD-A', 'BOD-B'],
   },
-  { role: 'OPERATOR', envPrefix: 'SEED_OPERATOR', name: 'Operario', warehouseCodes: ['BOD-A'] },
+  {
+    role: 'OPERATOR',
+    envPrefix: 'SEED_OPERATOR',
+    name: 'Operario',
+    warehouseCodes: ['BOD-A', 'BOD-B'],
+  },
   { role: 'AUDITOR', envPrefix: 'SEED_AUDITOR', name: 'Auditor', warehouseCodes: [] },
 ];
 

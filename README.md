@@ -41,7 +41,7 @@ Migraciones versionadas con `node-pg-migrate` en `migrations/` (archivos `.sql`)
 npm run seed   # crea el ADMIN y los usuarios de demo de .env (es idempotente)
 ```
 
-El seed crea el ADMIN y, si sus variables están definidas (`SEED_MANAGER_*`, `SEED_OPERATOR_*`, `SEED_AUDITOR_*`), un jefe de bodega, un operario y un auditor, con las bodegas de ejemplo `BOD-A` y `BOD-B` (el jefe y el operario quedan asignados a `BOD-A`). Con `NODE_ENV=production` rechaza las contraseñas de desarrollo de `.env.example`: en la nube hay que definir contraseñas propias en las variables de entorno.
+El seed crea el ADMIN y, si sus variables están definidas (`SEED_MANAGER_*`, `SEED_OPERATOR_*`, `SEED_AUDITOR_*`), un jefe de bodega, un operario y un auditor, con las bodegas de ejemplo `BOD-A` y `BOD-B` (el jefe y el operario quedan asignados a las dos, para poder hacer un traspaso completo; si ya existían, el seed les agrega la que les falte). Con `NODE_ENV=production` rechaza las contraseñas de desarrollo de `.env.example`: en la nube hay que definir contraseñas propias en las variables de entorno.
 
 El ADMIN gestiona usuarios por la API (Swagger, etiqueta _Usuarios_): `GET`/`POST /api/users`, `PUT /api/users/:id` (editar, activar o desactivar) y `PUT /api/users/:id/warehouses` (reemplaza las bodegas asignadas). Nunca se devuelve el hash de la contraseña.
 
