@@ -15,6 +15,9 @@ const warehouse: Warehouse = {
 function fakeStore(overrides: Partial<WarehouseStore> = {}): WarehouseStore {
   return {
     list: vi.fn(async () => ({ rows: [warehouse], total: 41 })),
+    listActive: vi.fn(async () => [
+      { id: warehouse.id, code: warehouse.code, name: warehouse.name },
+    ]),
     insert: vi.fn(async () => warehouse),
     update: vi.fn(async () => warehouse),
     ...overrides,
@@ -31,6 +34,17 @@ describe('WarehousesService', () => {
 
     expect(store.list).toHaveBeenCalledWith(20, 40, null);
     expect(result).toEqual({ data: [warehouse], page: 3, pageSize: 20, total: 41 });
+  });
+
+  it('listDestinations devuelve las bodegas activas del almacén, sin paginar ni filtrar por actor', async () => {
+    const store = fakeStore();
+    const result = await createWarehousesService({
+      warehouses: store,
+      access: allowAllAccess,
+    }).listDestinations();
+
+    expect(store.listActive).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ data: [{ id: warehouse.id, code: 'A', name: 'Bodega A' }] });
   });
 
   it('create delega en el almacén y devuelve la bodega creada', async () => {

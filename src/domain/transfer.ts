@@ -21,6 +21,16 @@ export const TRANSITIONS: Readonly<Record<TransferStatus, readonly TransferStatu
   CANCELLED: [],
 };
 
+/** Nombre en español de cada estado, para los mensajes que ve la persona usuaria. */
+export const STATUS_LABELS: Readonly<Record<TransferStatus, string>> = {
+  DRAFT: 'en borrador',
+  IN_TRANSIT: 'en tránsito',
+  RECEIVED: 'recibido',
+  DISCREPANCY: 'con discrepancia',
+  RESOLVED: 'resuelto',
+  CANCELLED: 'cancelado',
+};
+
 export function canTransition(from: TransferStatus, to: TransferStatus): boolean {
   return TRANSITIONS[from].includes(to);
 }

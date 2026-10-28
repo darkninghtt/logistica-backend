@@ -49,6 +49,12 @@ import { requireRole } from '../middlewares/require-role';
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: La bodega de origen o la de destino está inactiva
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *   get:
  *     tags: [Traspasos]
  *     summary: Lista los traspasos visibles para el usuario

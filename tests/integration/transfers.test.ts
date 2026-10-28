@@ -178,6 +178,26 @@ describe('POST /api/transfers', () => {
     expect(res.body.code).toBe('VALIDATION_ERROR');
   });
 
+  it.each([
+    ['origen', () => warehouseA, 'La bodega de origen está inactiva'],
+    ['destino', () => warehouseB, 'La bodega de destino está inactiva'],
+  ])('rechaza con 409 si la bodega de %s está inactiva', async (_caso, warehouse, message) => {
+    const id = warehouse();
+    const code = id === warehouseA ? 'A' : 'B';
+    await request(app)
+      .put(`/api/warehouses/${id}`)
+      .set(as('ADMIN'))
+      .send({ code, name: `Bodega ${code}`, active: false })
+      .expect(200);
+
+    const res = await request(app).post('/api/transfers').set(as('MANAGER_A')).send(draftBody());
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe(message);
+    const { rows } = await pool.query('SELECT 1 FROM transfers');
+    expect(rows).toHaveLength(0);
+  });
+
   it('responde 404 si el destino o un producto no existen', async () => {
     const noDestination = await request(app)
       .post('/api/transfers')
@@ -286,10 +306,25 @@ describe('POST /api/transfers/:id/dispatch', () => {
 
     expect(again.status).toBe(409);
     expect(again.body.code).toBe('INVALID_TRANSITION');
+    // El mensaje habla en español, sin códigos internos
+    expect(again.body.message).toBe('El traspaso está en tránsito y no admite esta acción');
     expect(await level(warehouseA, product1)).toMatchObject({ quantity: 12 });
     const { rows } = await pool.query(`SELECT 1 FROM stock_movements WHERE type = 'TRANSFER_OUT'`);
     expect(rows).toHaveLength(1);
     expect(await count('transfer_events')).toBe(2);
+  });
+
+  it('recibir un borrador da 409 con el estado en español', async () => {
+    const id = await createDraft();
+    const res = await request(app)
+      .post(`/api/transfers/${id}/receive`)
+      .set(as('MANAGER_B'))
+      .send({ items: [{ productId: product1, receivedQuantity: 8 }] });
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({
+      code: 'INVALID_TRANSITION',
+      message: 'El traspaso está en borrador y no admite esta acción',
+    });
   });
 
   it('despachar un traspaso cancelado da 409', async () => {

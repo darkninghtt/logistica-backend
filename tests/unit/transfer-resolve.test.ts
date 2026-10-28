@@ -74,6 +74,7 @@ function serviceWith(heads: (TransferHead | null)[]) {
     list: vi.fn(async () => ({ rows: [], total: 0 })),
     findDetail: vi.fn(async () => null),
     findHead,
+    inactiveWarehouseIds: vi.fn(async () => []),
   };
   const service = createTransfersService({
     store,

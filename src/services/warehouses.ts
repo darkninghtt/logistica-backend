@@ -1,7 +1,7 @@
 import { assertRole, type Actor } from '../domain/authorization';
 import { NotFoundError } from '../domain/errors';
 import type { Page } from '../domain/page';
-import type { Warehouse } from '../domain/warehouse';
+import type { Warehouse, WarehouseOption } from '../domain/warehouse';
 import type { PageQuery } from '../schemas/page';
 import type { WarehouseInput } from '../schemas/warehouses';
 import type { WarehouseAccess } from './warehouse-access';
@@ -17,6 +17,8 @@ export interface WarehouseStore {
     offset: number,
     onlyIds: string[] | null,
   ): Promise<{ rows: Warehouse[]; total: number }>;
+  /** Todas las bodegas activas, ordenadas por código. */
+  listActive(): Promise<WarehouseOption[]>;
   insert(input: WarehouseInput): Promise<Warehouse>;
   /** Reemplaza code, name y active. Devuelve null si el id no existe. */
   update(id: string, input: WarehouseInput): Promise<Warehouse | null>;
@@ -25,6 +27,8 @@ export interface WarehouseStore {
 export interface WarehousesService {
   /** ADMIN y AUDITOR ven todas; el jefe de bodega y el operario, solo las asignadas. */
   list(query: PageQuery, actor: Actor): Promise<Page<Warehouse>>;
+  /** Bodegas activas que se pueden elegir como destino de un traspaso: las ven todos los roles. */
+  listDestinations(): Promise<{ data: WarehouseOption[] }>;
   /** Solo el ADMIN. */
   create(input: WarehouseInput, actor: Actor): Promise<Warehouse>;
   /** Solo el ADMIN. */
@@ -43,6 +47,11 @@ export function createWarehousesService({
       const onlyIds = await access.visibleIds(actor);
       const { rows, total } = await warehouses.list(pageSize, (page - 1) * pageSize, onlyIds);
       return { data: rows, page, pageSize, total };
+    },
+
+    async listDestinations() {
+      // Código y nombre no son sensibles: quien traspasa necesita ver bodegas que no tiene asignadas
+      return { data: await warehouses.listActive() };
     },
 
     async create(input, actor) {
