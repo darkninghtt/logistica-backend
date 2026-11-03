@@ -182,17 +182,18 @@ describe('costos del stock', () => {
       warehouseExists: async () => true,
       productExists: async () => true,
       listLevels: async () => ({ rows: [level], total: 1 }),
-      listMovements: async () => ({ rows: [movement], total: 1 }),
+      listMovements: async () => [movement],
     };
     return createStockQueryService({ store, access: allowAllAccess });
   }
   const query = { warehouseId: WAREHOUSE_A, page: 1, pageSize: 20 };
+  const movementsQuery = { warehouseId: WAREHOUSE_A, limit: 20 };
 
   it.each(['ADMIN', 'AUDITOR', 'WAREHOUSE_MANAGER'] as const)(
     '%s recibe los costos',
     async (role) => {
       const levels = await service().listLevels(query, actor(role));
-      const movements = await service().listMovements(query, actor(role));
+      const movements = await service().listMovements(movementsQuery, actor(role));
       expect(levels.data[0]).toHaveProperty('avgCost', '110.0000');
       expect(levels.data[0]).toHaveProperty('totalValue', '2200.0000');
       expect(movements.data[0]).toHaveProperty('unitCost', '120.0000');
@@ -202,7 +203,7 @@ describe('costos del stock', () => {
 
   it('OPERATOR no recibe ningún campo de costo', async () => {
     const levels = await service().listLevels(query, actor('OPERATOR'));
-    const movements = await service().listMovements(query, actor('OPERATOR'));
+    const movements = await service().listMovements(movementsQuery, actor('OPERATOR'));
     const json = JSON.stringify([levels, movements]);
     for (const field of ['avgCost', 'totalValue', 'unitCost', 'balanceAvgCost']) {
       expect(json).not.toContain(field);
@@ -215,7 +216,7 @@ describe('costos del stock', () => {
       warehouseExists: async () => true,
       productExists: async () => true,
       listLevels: vi.fn(async () => ({ rows: [], total: 0 })),
-      listMovements: vi.fn(async () => ({ rows: [], total: 0 })),
+      listMovements: vi.fn(async () => []),
     };
     const guarded = createStockQueryService({
       store,
@@ -225,9 +226,9 @@ describe('costos del stock', () => {
     await expect(guarded.listLevels(query, actor('OPERATOR'))).rejects.toBeInstanceOf(
       ForbiddenError,
     );
-    await expect(guarded.listMovements(query, actor('WAREHOUSE_MANAGER'))).rejects.toBeInstanceOf(
-      ForbiddenError,
-    );
+    await expect(
+      guarded.listMovements(movementsQuery, actor('WAREHOUSE_MANAGER')),
+    ).rejects.toBeInstanceOf(ForbiddenError);
     expect(store.listLevels).not.toHaveBeenCalled();
     expect(store.listMovements).not.toHaveBeenCalled();
   });

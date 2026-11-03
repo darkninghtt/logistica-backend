@@ -4,6 +4,7 @@ import swaggerUi from 'swagger-ui-express';
 import { createAuthController, readCookie, REFRESH_COOKIE } from './controllers/auth';
 import { createProductsController } from './controllers/products';
 import { createRealtimeController } from './controllers/realtime';
+import { createReportsController } from './controllers/reports';
 import { createStockController } from './controllers/stock';
 import { createStockQueryController } from './controllers/stock-queries';
 import { createTransfersController } from './controllers/transfers';
@@ -18,6 +19,7 @@ import { createAuthRouter } from './routes/auth';
 import { createHealthRouter } from './routes/health';
 import { createProductsRouter } from './routes/products';
 import { createRealtimeRouter } from './routes/realtime';
+import { createReportsRouter } from './routes/reports';
 import { createStockRouter } from './routes/stock';
 import { createStockQueryRouter } from './routes/stock-queries';
 import { createTransfersRouter } from './routes/transfers';
@@ -26,6 +28,7 @@ import { createWarehousesRouter } from './routes/warehouses';
 import type { AuthService, TokenService } from './services/auth';
 import type { ProductsService } from './services/products';
 import type { RealtimeService } from './services/realtime';
+import type { ReportsService } from './services/reports';
 import type { StockService } from './services/stock';
 import type { StockQueryService } from './services/stock-queries';
 import type { TransfersService } from './services/transfers';
@@ -44,6 +47,7 @@ export interface AppDeps {
   transfersService: TransfersService;
   userManagementService: UserManagementService;
   realtimeService: RealtimeService;
+  reportsService: ReportsService;
   /** Saltos de proxy de confianza (`trust proxy`); 0 si no hay proxy delante. */
   trustProxy?: number;
   /** Rate limiting; si se omite no se limita (las pruebas lo activan cuando lo necesitan). */
@@ -66,6 +70,7 @@ export function createApp({
   transfersService,
   userManagementService,
   realtimeService,
+  reportsService,
   trustProxy = 0,
   rateLimits,
   cookieSecure = false,
@@ -117,6 +122,7 @@ export function createApp({
   app.use('/api/stock', createStockQueryRouter(createStockQueryController(stockQueryService)));
   app.use('/api/transfers', createTransfersRouter(createTransfersController(transfersService)));
   app.use('/api/realtime', createRealtimeRouter(createRealtimeController(realtimeService)));
+  app.use('/api/reports', createReportsRouter(createReportsController(reportsService)));
 
   // Frontend (un solo origen): archivos estáticos y fallback al router de Vue
   const frontend = publicDir === undefined ? null : createFrontendHandlers(publicDir);

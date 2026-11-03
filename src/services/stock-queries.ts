@@ -1,5 +1,6 @@
 import { NotFoundError } from '../domain/errors';
-import type { Page } from '../domain/page';
+import { toCursorPage, type CursorPage, type Page } from '../domain/page';
+import type { MovementType } from '../domain/stock';
 import type { Actor } from '../domain/authorization';
 import {
   withoutLevelCosts,
@@ -12,6 +13,13 @@ import {
 import type { StockLevelsQuery, StockMovementsQuery } from '../schemas/stock-queries';
 import type { WarehouseAccess } from './warehouse-access';
 
+/** Filtros del historial de movimientos. */
+export interface MovementFilter {
+  warehouseId: string;
+  productId?: string;
+  type?: MovementType;
+}
+
 /** Lo que el servicio necesita de la persistencia (solo lectura; la implementa el repositorio). */
 export interface StockQueryStore {
   warehouseExists(warehouseId: string): Promise<boolean>;
@@ -22,13 +30,15 @@ export interface StockQueryStore {
     limit: number,
     offset: number,
   ): Promise<{ rows: StockLevelItem[]; total: number }>;
-  /** Movimientos de una bodega (opcionalmente de un producto), del más nuevo al más antiguo. */
+  /**
+   * Hasta `limit` movimientos, del más nuevo al más antiguo, con id menor que `beforeId` si viene.
+   * Al paginar por id, los movimientos que se insertan mientras se recorre no corren las páginas.
+   */
   listMovements(
-    warehouseId: string,
-    productId: string | undefined,
+    filter: MovementFilter,
     limit: number,
-    offset: number,
-  ): Promise<{ rows: StockMovementItem[]; total: number }>;
+    beforeId: string | undefined,
+  ): Promise<StockMovementItem[]>;
 }
 
 /** Los costos son datos sensibles: el OPERATOR no los recibe (se quitan aquí, no en la interfaz). */
@@ -42,7 +52,7 @@ export interface StockQueryService {
   listMovements(
     query: StockMovementsQuery,
     actor: Actor,
-  ): Promise<Page<StockMovementItem | StockMovementItemNoCost>>;
+  ): Promise<CursorPage<StockMovementItem | StockMovementItemNoCost>>;
 }
 
 export function createStockQueryService({
@@ -67,20 +77,18 @@ export function createStockQueryService({
       return { data, page, pageSize, total };
     },
 
-    async listMovements({ warehouseId, productId, page, pageSize }, actor) {
+    async listMovements({ warehouseId, productId, type, limit, cursor }, actor) {
       await access.assert(actor, warehouseId);
       await requireWarehouse(warehouseId);
       if (productId && !(await store.productExists(productId))) {
         throw new NotFoundError('El producto no existe');
       }
-      const { rows, total } = await store.listMovements(
-        warehouseId,
-        productId,
-        pageSize,
-        (page - 1) * pageSize,
-      );
-      const data = actor.role === ROLE_WITHOUT_COSTS ? rows.map(withoutMovementCosts) : rows;
-      return { data, page, pageSize, total };
+      // Se pide una fila de más para saber si hay otra página
+      const rows = await store.listMovements({ warehouseId, productId, type }, limit + 1, cursor);
+      const page = toCursorPage(rows, limit);
+      return actor.role === ROLE_WITHOUT_COSTS
+        ? { data: page.data.map(withoutMovementCosts), nextCursor: page.nextCursor }
+        : page;
     },
   };
 }

@@ -163,7 +163,8 @@ describe('GET /api/stock/movements', () => {
       .set(auth());
 
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ page: 1, pageSize: 20, total: 2 });
+    expect(res.body.data).toHaveLength(2);
+    expect(res.body.nextCursor).toBeNull();
     const [latest, oldest] = res.body.data;
     expect(latest).toMatchObject({
       type: 'ENTRY',
@@ -190,7 +191,7 @@ describe('GET /api/stock/movements', () => {
       .get(`/api/stock/movements?warehouseId=${warehouseA}&productId=${nuts}`)
       .set(auth());
 
-    expect(res.body.total).toBe(1);
+    expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0]).toMatchObject({ productSku: 'SKU-2', quantity: 3 });
   });
 
@@ -202,28 +203,68 @@ describe('GET /api/stock/movements', () => {
       .get(`/api/stock/movements?warehouseId=${warehouseB}`)
       .set(auth());
 
-    expect(res.body.total).toBe(1);
+    expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0]).toMatchObject({ quantity: 9, warehouseId: warehouseB });
   });
 
-  it('pagina el historial', async () => {
+  it('pagina por cursor: la siguiente página empieza justo después de la anterior', async () => {
     for (const cost of ['10', '20', '30']) {
       await enter(warehouseA, screws, 1, cost);
     }
+    const url = `/api/stock/movements?warehouseId=${warehouseA}&limit=2`;
 
-    const first = await request(app)
-      .get(`/api/stock/movements?warehouseId=${warehouseA}&page=1&pageSize=2`)
-      .set(auth());
-    const second = await request(app)
-      .get(`/api/stock/movements?warehouseId=${warehouseA}&page=2&pageSize=2`)
-      .set(auth());
+    const first = await request(app).get(url).set(auth());
+    const second = await request(app).get(url).query({ cursor: first.body.nextCursor }).set(auth());
 
-    expect(first.body.total).toBe(3);
     expect(first.body.data.map((m: { unitCost: string }) => m.unitCost)).toEqual([
       '30.0000',
       '20.0000',
     ]);
+    expect(first.body.nextCursor).toEqual(expect.any(String));
     expect(second.body.data.map((m: { unitCost: string }) => m.unitCost)).toEqual(['10.0000']);
+    expect(second.body.nextCursor).toBeNull();
+  });
+
+  it('recorrer todas las páginas no repite ni salta filas aunque entren movimientos en medio', async () => {
+    for (let i = 1; i <= 7; i++) await enter(warehouseA, screws, 1, String(i));
+    const { rows } = await pool.query<{ id: string }>(
+      'SELECT id FROM stock_movements WHERE warehouse_id = $1 ORDER BY id DESC',
+      [warehouseA],
+    );
+    const before = rows.map((r) => r.id);
+
+    const seen: string[] = [];
+    let cursor: string | null | undefined;
+    let pages = 0;
+    do {
+      const res = await request(app)
+        .get('/api/stock/movements')
+        .query({ warehouseId: warehouseA, limit: 3, ...(cursor ? { cursor } : {}) })
+        .set(auth());
+      expect(res.status).toBe(200);
+      seen.push(...res.body.data.map((m: { id: string }) => m.id));
+      cursor = res.body.nextCursor;
+      pages++;
+      // Mientras se recorre llegan movimientos nuevos: con OFFSET correrían las páginas
+      if (pages === 1) {
+        await enter(warehouseA, screws, 1, '50');
+        await enter(warehouseA, screws, 1, '60');
+      }
+    } while (cursor);
+
+    expect(pages).toBe(3);
+    expect(seen).toEqual(before);
+    expect(new Set(seen).size).toBe(seen.length);
+  });
+
+  it('filtra por tipo de movimiento', async () => {
+    await enter(warehouseA, screws, 5, '10');
+    const res = await request(app)
+      .get(`/api/stock/movements?warehouseId=${warehouseA}&type=SHRINKAGE`)
+      .set(auth());
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ data: [], nextCursor: null });
   });
 
   it('sin movimientos devuelve la lista vacía', async () => {
@@ -232,7 +273,7 @@ describe('GET /api/stock/movements', () => {
       .set(auth());
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ data: [], page: 1, pageSize: 20, total: 0 });
+    expect(res.body).toEqual({ data: [], nextCursor: null });
   });
 
   it('una bodega inexistente da 404', async () => {
@@ -258,13 +299,22 @@ describe('GET /api/stock/movements', () => {
     const badProduct = await request(app)
       .get(`/api/stock/movements?warehouseId=${warehouseA}&productId=abc`)
       .set(auth());
-    const badPage = await request(app)
-      .get(`/api/stock/movements?warehouseId=${warehouseA}&page=0`)
+    const badLimit = await request(app)
+      .get(`/api/stock/movements?warehouseId=${warehouseA}&limit=0`)
+      .set(auth());
+    const badCursor = await request(app)
+      .get(`/api/stock/movements?warehouseId=${warehouseA}&cursor=no-es-un-cursor`)
+      .set(auth());
+    const badType = await request(app)
+      .get(`/api/stock/movements?warehouseId=${warehouseA}&type=GIFT`)
       .set(auth());
 
     expect(noWarehouse.status).toBe(400);
     expect(badProduct.status).toBe(400);
-    expect(badPage.status).toBe(400);
+    expect(badLimit.status).toBe(400);
+    expect(badCursor.status).toBe(400);
+    expect(badCursor.body.code).toBe('VALIDATION_ERROR');
+    expect(badType.status).toBe(400);
   });
 
   it('sin token da 401', async () => {
