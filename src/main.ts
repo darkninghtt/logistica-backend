@@ -1,6 +1,7 @@
 import { createApp } from './app';
 import { loadConfig } from './config';
 import { createPool, createTransactionRunner } from './db';
+import type { EventPublisher } from './domain/realtime';
 import { correlationContext, createLogger } from './logger';
 import { attachRealtime } from './realtime-server';
 import { createRefreshTokensRepository } from './repositories/refresh-tokens';
@@ -25,6 +26,7 @@ import { createTransfersService } from './services/transfers';
 import { createUserManagementService } from './services/user-management';
 import { createWarehousesService } from './services/warehouses';
 import { createWarehouseAccess } from './services/warehouse-access';
+import { createTaskQueue } from './task-queue';
 
 function main(): void {
   const config = loadConfig(process.env);
@@ -60,7 +62,12 @@ function main(): void {
   const access = createWarehouseAccess({
     assignments: { warehouseIdsOf: (userId) => usersRepository.warehouseIdsOf(userId) },
   });
+  // Tiempo real: los servicios encolan el aviso después del COMMIT y la cola lo envía con reintentos
   const realtimeService = createRealtimeService({ access });
+  const queue = createTaskQueue({ logger, correlationId: () => correlationContext.getStore() });
+  const events: EventPublisher = {
+    publish: (event) => queue.enqueue(event.type, () => realtimeService.publish(event)),
+  };
   const warehousesService = createWarehousesService({
     warehouses: createWarehousesRepository(pool),
     access,
@@ -68,6 +75,7 @@ function main(): void {
   const productsService = createProductsService({ products: createProductsRepository(pool) });
   const stockService = createStockService({
     access,
+    events,
     runInTransaction: (work) => withTransaction((client) => work(createStockRepository(client))),
   });
   const stockQueryService = createStockQueryService({
@@ -84,6 +92,7 @@ function main(): void {
         }),
       ),
     access,
+    events,
   });
   const userManagementService = createUserManagementService({
     users: usersRepository,

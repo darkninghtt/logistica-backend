@@ -11,6 +11,7 @@ import {
   type StockMovementNoCost,
 } from '../domain/stock';
 import { assertRole, type Actor } from '../domain/authorization';
+import { noEvents, type EventPublisher } from '../domain/realtime';
 import type { StockEntryInput, StockShrinkageInput } from '../schemas/stock';
 import type { WarehouseAccess } from './warehouse-access';
 
@@ -59,6 +60,8 @@ export interface StockDeps {
   /** Abre una transacción y entrega el almacén ligado a ella (COMMIT si termina, ROLLBACK si falla). */
   runInTransaction<T>(work: (store: StockStore) => Promise<T>): Promise<T>;
   access: WarehouseAccess;
+  /** Avisos de tiempo real; se publican solo después del COMMIT. Sin él no se avisa nada. */
+  events?: EventPublisher;
 }
 
 /** Quién puede registrar entradas: el ADMIN en cualquier bodega, el jefe solo en las suyas. */
@@ -68,12 +71,21 @@ const SHRINKAGE_ROLES = ['WAREHOUSE_MANAGER', 'OPERATOR'] as const;
 /** Los costos son datos sensibles: el OPERATOR no los recibe (se quitan aquí, no en la interfaz). */
 const ROLE_WITHOUT_COSTS = 'OPERATOR';
 
-export function createStockService({ runInTransaction, access }: StockDeps): StockService {
+export function createStockService({
+  runInTransaction,
+  access,
+  events = noEvents,
+}: StockDeps): StockService {
+  /** Se llama con la transacción ya confirmada: si hubo ROLLBACK, la excepción evita llegar aquí. */
+  function announce(warehouseId: string, productId: string): void {
+    events.publish({ type: 'stock.changed', payload: { warehouseId, productIds: [productId] } });
+  }
+
   return {
     async registerEntry(input, actor) {
       assertRole(actor, ENTRY_ROLES);
       await access.assert(actor, input.warehouseId);
-      return runInTransaction(async (store) => {
+      const result = await runInTransaction(async (store) => {
         const { productId, warehouseId } = input;
         await store.ensureLevel(productId, warehouseId);
         const current = await store.lockLevel(productId, warehouseId);
@@ -92,6 +104,8 @@ export function createStockService({ runInTransaction, access }: StockDeps): Sto
         });
         return { movement, stockLevel };
       });
+      announce(input.warehouseId, input.productId);
+      return result;
     },
 
     async registerShrinkage(input, actor) {
@@ -120,6 +134,7 @@ export function createStockService({ runInTransaction, access }: StockDeps): Sto
         });
         return { movement, stockLevel };
       });
+      announce(input.warehouseId, input.productId);
       return actor.role === ROLE_WITHOUT_COSTS
         ? {
             movement: movementWithoutCosts(result.movement),

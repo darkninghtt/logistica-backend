@@ -1,6 +1,7 @@
 import { assertRole, type Actor } from '../domain/authorization';
 import { ConflictError, ForbiddenError, NotFoundError } from '../domain/errors';
 import type { Page } from '../domain/page';
+import { noEvents, type EventPublisher } from '../domain/realtime';
 import { applyEntry, type StockBalance } from '../domain/stock';
 import {
   assertTransition,
@@ -117,6 +118,8 @@ export interface TransfersDeps {
   store: TransferReadStore;
   runInTransaction<T>(work: (tx: TransferTx) => Promise<T>): Promise<T>;
   access: WarehouseAccess;
+  /** Avisos de tiempo real; se publican solo después del COMMIT. Sin él no se avisa nada. */
+  events?: EventPublisher;
 }
 
 const CREATE_ROLES = ['WAREHOUSE_MANAGER', 'OPERATOR'] as const;
@@ -200,6 +203,7 @@ export function createTransfersService({
   store,
   runInTransaction,
   access,
+  events = noEvents,
 }: TransfersDeps): TransfersService {
   async function requireHead(id: string): Promise<TransferHead> {
     const head = await store.findHead(id);
@@ -212,6 +216,29 @@ export function createTransfersService({
     const visible = await access.visibleIds(actor);
     if (visible && !visible.includes(head.originId) && !visible.includes(head.destinationId)) {
       throw new ForbiddenError('No tienes acceso a ese traspaso');
+    }
+  }
+
+  /**
+   * Avisa del nuevo estado y, si hubo movimientos, de qué productos cambiaron en `stockWarehouseId`.
+   * Se llama con la transacción ya confirmada: si hubo ROLLBACK, la excepción evita llegar aquí.
+   */
+  function announce(
+    transfer: { id: string; originId: string; destinationId: string },
+    status: TransferStatus,
+    stock?: { warehouseId: string; productIds: string[] },
+  ): void {
+    events.publish({
+      type: 'transfer.updated',
+      payload: {
+        transferId: transfer.id,
+        status,
+        originWarehouseId: transfer.originId,
+        destinationWarehouseId: transfer.destinationId,
+      },
+    });
+    if (stock && stock.productIds.length > 0) {
+      events.publish({ type: 'stock.changed', payload: stock });
     }
   }
 
@@ -253,6 +280,10 @@ export function createTransfersService({
         });
         return transferId;
       });
+      announce(
+        { id, originId: input.originWarehouseId, destinationId: input.destinationWarehouseId },
+        'DRAFT',
+      );
       return detailFor(id, actor);
     },
 
@@ -282,6 +313,7 @@ export function createTransfersService({
       await runInTransaction((tx) =>
         moveStatus(tx, id, 'DRAFT', 'CANCELLED', actor.userId, input.reason ?? null),
       );
+      announce(head, 'CANCELLED');
       return detailFor(id, actor);
     },
 
@@ -289,12 +321,13 @@ export function createTransfersService({
       assertRole(actor, DISPATCH_ROLES);
       const head = await requireHead(id);
       await access.assert(actor, head.originId);
-      await runInTransaction(async (tx) => {
+      const productIds = await runInTransaction(async (tx) => {
         // 1) La fila del traspaso (UPDATE condicional): un despacho repetido se detiene aquí con 409
         await moveStatus(tx, id, 'DRAFT', 'IN_TRANSIT', actor.userId);
 
         // 2) El stock del origen, por product_id: siempre el mismo orden evita deadlocks
-        for (const item of await tx.transfers.listItems(id)) {
+        const items = await tx.transfers.listItems(id);
+        for (const item of items) {
           await tx.stock.ensureLevel(item.productId, head.originId);
           const current = await tx.stock.lockLevel(item.productId, head.originId);
           if (current.quantity < item.quantitySent) {
@@ -322,7 +355,9 @@ export function createTransfersService({
           });
           await tx.transfers.freezeItemCost(id, item.productId, current.avgCost);
         }
+        return items.map((item) => item.productId);
       });
+      announce(head, 'IN_TRANSIT', { warehouseId: head.originId, productIds });
       return detailFor(id, actor);
     },
 
@@ -330,7 +365,7 @@ export function createTransfersService({
       assertRole(actor, RECEIVE_ROLES);
       const head = await requireHead(id);
       await access.assert(actor, head.destinationId);
-      await runInTransaction(async (tx) => {
+      const receipt = await runInTransaction(async (tx) => {
         // Los ítems no cambian después del borrador; la declaración se valida antes de tocar nada
         const items = await tx.transfers.listItems(id);
         const receipt = computeReceipt(items, input.items);
@@ -353,6 +388,11 @@ export function createTransfersService({
             actorId: actor.userId,
           });
         }
+        return receipt;
+      });
+      announce(head, receipt.status, {
+        warehouseId: head.destinationId,
+        productIds: receipt.items.filter((line) => line.entering > 0).map((line) => line.productId),
       });
       return detailFor(id, actor);
     },
@@ -362,18 +402,21 @@ export function createTransfersService({
       const head = await requireHead(id);
       await assertCanView(head, actor);
       assertNotReceiver(head.receivedBy, actor);
-      await runInTransaction(async (tx) => {
+      const adjusted = await runInTransaction(async (tx) => {
         await moveStatus(tx, id, 'DISCREPANCY', 'RESOLVED', actor.userId, input.reason);
         // Se vuelve a comprobar con el estado ya bloqueado: si el traspaso se recibió justo después
         // de leerlo arriba, la persona que recibió igual no puede resolverlo
         assertNotReceiver((await tx.transfers.findHead(id))?.receivedBy ?? null, actor);
 
+        // Productos con movimiento nuevo en el destino (merma en tránsito o ajuste de entrada)
+        const touched: string[] = [];
         for (const item of await tx.transfers.listItems(id)) {
           if (item.quantityReceived === null) {
             throw new Error('Un traspaso con discrepancia debería tener las cantidades recibidas');
           }
           const shortfall = item.quantitySent - item.quantityReceived;
           const surplus = item.quantityReceived - item.quantitySent;
+          if (shortfall > 0 || surplus > 0) touched.push(item.productId);
           if (shortfall > 0) {
             // Merma en tránsito: la mercancía ya salió del origen y nunca llegó. No mueve el stock
             // de ninguna bodega, así que el libro guarda el saldo y el costo del destino sin cambios
@@ -405,7 +448,9 @@ export function createTransfersService({
             });
           }
         }
+        return touched;
       });
+      announce(head, 'RESOLVED', { warehouseId: head.destinationId, productIds: adjusted });
       return detailFor(id, actor);
     },
   };

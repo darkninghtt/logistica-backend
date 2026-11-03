@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import pino from 'pino';
 import { createApp, type AppDeps } from '../../src/app';
 import { withTransaction } from '../../src/db';
+import type { EventPublisher } from '../../src/domain/realtime';
 import { createRefreshTokensRepository } from '../../src/repositories/refresh-tokens';
 import { createProductsRepository } from '../../src/repositories/products';
 import { createStockRepository } from '../../src/repositories/stock';
@@ -26,6 +27,7 @@ import { createUserManagementService } from '../../src/services/user-management'
 import { createUsersService } from '../../src/services/users';
 import { createWarehousesService } from '../../src/services/warehouses';
 import { createWarehouseAccess } from '../../src/services/warehouse-access';
+import { createTaskQueue, type TaskQueue } from '../../src/task-queue';
 
 export const TEST_JWT_SECRET = 'secreto-solo-para-pruebas-con-mas-de-32-caracteres';
 export const ADMIN = { email: 'admin@example.com', password: 'Clave-segura-123', name: 'Admin' };
@@ -36,6 +38,8 @@ export interface TestApp {
   /** Dependencias con las que se armó la app (para volver a armarla con opciones extra). */
   deps: AppDeps;
   realtime: RealtimeService;
+  /** Cola de los avisos de tiempo real (`idle()` espera a que se envíen). */
+  queue: TaskQueue;
 }
 
 /** Compone la app real (mismas piezas que main.ts) contra la BD de pruebas. */
@@ -56,6 +60,10 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
   });
   const realtime = createRealtimeService({ access });
   const logger = pino({ level: 'silent' });
+  const queue = createTaskQueue({ logger });
+  const events: EventPublisher = {
+    publish: (event) => queue.enqueue(event.type, () => realtime.publish(event)),
+  };
   const warehousesService = createWarehousesService({
     warehouses: createWarehousesRepository(pool),
     access,
@@ -63,6 +71,7 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
   const productsService = createProductsService({ products: createProductsRepository(pool) });
   const stockService = createStockService({
     access,
+    events,
     runInTransaction: (work) =>
       withTransaction(pool, (client) => work(createStockRepository(client))),
   });
@@ -80,6 +89,7 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
         }),
       ),
     access,
+    events,
   });
   const userManagementService = createUserManagementService({ users, hasher });
   const deps: AppDeps = {
@@ -94,7 +104,7 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
     userManagementService,
     realtimeService: realtime,
   };
-  return { app: createApp(deps), tokens, deps, realtime };
+  return { app: createApp(deps), tokens, deps, realtime, queue };
 }
 
 /** Crea el ADMIN de pruebas (con la misma lógica del seed real). */
