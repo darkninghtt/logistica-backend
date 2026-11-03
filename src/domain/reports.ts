@@ -69,3 +69,65 @@ export interface ReportProduct {
   name: string;
   unit: string;
 }
+
+/**
+ * Zona horaria con la que se interpretan los filtros por fecha (`from` y `to`): una merma
+ * registrada a las 9 p. m. en Colombia cuenta para ese día, no para el siguiente en UTC.
+ */
+export const REPORT_TIME_ZONE = 'America/Bogota';
+
+/** Tipos de movimiento que cuentan como merma en el reporte. */
+export const SHRINKAGE_TYPES = ['SHRINKAGE', 'TRANSIT_SHRINKAGE'] as const;
+export type ShrinkageType = (typeof SHRINKAGE_TYPES)[number];
+
+/**
+ * Fila del reporte de mermas: lo perdido de un producto en una bodega, por tipo y motivo. El motivo
+ * de una merma de bodega es su código (DAMAGE, EXPIRED...; sin la nota). La merma en tránsito no se
+ * agrupa por motivo (es texto libre de cada resolución) y queda en la bodega de destino, que es
+ * donde se registró.
+ */
+export interface ShrinkageReportRow {
+  warehouseId: string;
+  warehouseCode: string;
+  warehouseName: string;
+  productId: string;
+  productSku: string;
+  productName: string;
+  type: ShrinkageType;
+  reason: string | null;
+  quantity: number;
+  /** Cantidad × costo con que se registró cada merma, sumado. */
+  value: string;
+}
+
+export interface ShrinkageReport {
+  data: ShrinkageReportRow[];
+  totals: { quantity: number; value: string };
+}
+
+/** Traspaso en tránsito valorizado al costo congelado al despachar. */
+export interface InTransitReportRow {
+  transferId: string;
+  originWarehouseId: string;
+  originCode: string;
+  originName: string;
+  destinationWarehouseId: string;
+  destinationCode: string;
+  destinationName: string;
+  dispatchedAt: string;
+  daysInTransit: number;
+  quantity: number;
+  value: string;
+}
+
+export interface InTransitReport {
+  data: InTransitReportRow[];
+  totals: { transfers: number; quantity: number; value: string };
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Días completos transcurridos desde el despacho (0 el mismo día). */
+export function daysInTransit(dispatchedAt: string, now: Date): number {
+  return Math.max(0, Math.floor((now.getTime() - new Date(dispatchedAt).getTime()) / DAY_MS));
+}

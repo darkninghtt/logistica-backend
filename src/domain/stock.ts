@@ -86,6 +86,11 @@ export function totalValue(balance: StockBalance): string {
   return new Money(balance.avgCost).times(balance.quantity).toFixed(COST_SCALE);
 }
 
+/** Suma exacta de valores monetarios (strings), con 4 decimales: nunca con `number`. */
+export function sumValues(values: readonly string[]): string {
+  return values.reduce((total, value) => total.plus(value), new Money(0)).toFixed(COST_SCALE);
+}
+
 /** Nivel de existencias tal como lo devuelve la API. */
 export interface StockLevel {
   productId: string;

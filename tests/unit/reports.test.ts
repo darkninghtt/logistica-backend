@@ -75,6 +75,8 @@ describe('ReportsService.kardex', () => {
       findWarehouse: vi.fn(async () => ({ id: WAREHOUSE, code: 'A', name: 'Bodega A' })),
       findProduct: vi.fn(async () => ({ id: PRODUCT, sku: 'SKU-1', name: 'Tornillo', unit: 'un' })),
       listKardex: vi.fn(async () => rows),
+      listShrinkage: vi.fn(async () => []),
+      listInTransit: vi.fn(async () => []),
       ...overrides,
     };
     return store;
