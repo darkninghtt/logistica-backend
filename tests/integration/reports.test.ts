@@ -347,3 +347,137 @@ describe('GET /api/reports/kardex', () => {
     expect(res.body.paths).toHaveProperty('/api/reports/kardex');
   });
 });
+
+/** Fecha de hoy (AAAA-MM-DD) en la zona horaria de los reportes. */
+function todayInBogota(offsetDays = 0): string {
+  const date = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(date);
+}
+
+function report(who: Who, path: string, query: Record<string, string> = {}): request.Test {
+  return request(app).get(`/api/reports/${path}`).query(query).set(as(who));
+}
+
+describe('GET /api/reports/shrinkage', () => {
+  // Además de lo de arriba (merma DAMAGE de 2 u en A a $104.1176 y la merma en tránsito de 1 u a
+  // $90 registrada en A): otra DAMAGE de 1 u en A con nota y un robo de 1 u en B a $90.
+  beforeAll(async () => {
+    const shrink = (who: Who, warehouseId: string, reason: string, note: string) =>
+      ok(
+        request(app)
+          .post('/api/stock/shrinkage')
+          .set(as(who))
+          .send({ warehouseId, productId: product, quantity: 1, reason, note }),
+        201,
+      );
+    await shrink('MANAGER_A', warehouseA, 'DAMAGE', 'golpe al descargar');
+    await shrink('MANAGER_B', warehouseB, 'THEFT', 'faltante en conteo');
+  });
+
+  it('agrupa por bodega, producto, tipo y código del motivo, con valores exactos', async () => {
+    const res = await ok(report('ADMIN', 'shrinkage'));
+
+    expect(
+      res.body.data.map((r: Record<string, unknown>) => [
+        r.warehouseCode,
+        r.productSku,
+        r.type,
+        r.reason,
+        r.quantity,
+        r.value,
+      ]),
+    ).toEqual([
+      ['A', 'SKU-1', 'SHRINKAGE', 'DAMAGE', 3, '312.3528'],
+      ['A', 'SKU-1', 'TRANSIT_SHRINKAGE', null, 1, '90.0000'],
+      ['B', 'SKU-1', 'SHRINKAGE', 'THEFT', 1, '90.0000'],
+    ]);
+    expect(res.body.totals).toEqual({ quantity: 5, value: '492.3528' });
+  });
+
+  it('filtra por bodega', async () => {
+    const res = await ok(report('AUDITOR', 'shrinkage', { warehouseId: warehouseB }));
+    expect(res.body.data).toHaveLength(1);
+    expect(res.body.totals).toEqual({ quantity: 1, value: '90.0000' });
+  });
+
+  it('filtra por fechas (inclusive, en hora de Colombia)', async () => {
+    const today = todayInBogota();
+    const all = await ok(report('ADMIN', 'shrinkage', { from: today, to: today }));
+    const future = await ok(report('ADMIN', 'shrinkage', { from: todayInBogota(1) }));
+    const past = await ok(report('ADMIN', 'shrinkage', { to: todayInBogota(-1) }));
+
+    expect(all.body.totals.quantity).toBe(5);
+    expect(future.body).toEqual({ data: [], totals: { quantity: 0, value: '0.0000' } });
+    expect(past.body.data).toEqual([]);
+  });
+
+  it('el jefe sin bodega en la query ve solo las suyas; una ajena da 403', async () => {
+    const own = await ok(report('MANAGER_A', 'shrinkage'));
+    expect(own.body.data.every((r: { warehouseCode: string }) => r.warehouseCode === 'A')).toBe(
+      true,
+    );
+    expect((await report('MANAGER_A', 'shrinkage', { warehouseId: warehouseB })).status).toBe(403);
+  });
+
+  it('el OPERATOR recibe 403', async () => {
+    expect((await report('OPERATOR_A', 'shrinkage')).status).toBe(403);
+  });
+
+  it('fechas inválidas o al revés dan 400', async () => {
+    const reversed = await report('ADMIN', 'shrinkage', { from: '2026-11-05', to: '2026-11-01' });
+    expect(reversed.status).toBe(400);
+    expect((await report('ADMIN', 'shrinkage', { from: '05/11/2026' })).status).toBe(400);
+  });
+});
+
+describe('GET /api/reports/in-transit', () => {
+  let pending: string;
+
+  // A tiene 14 u a $104.1176: se despachan 2 a B y quedan en tránsito
+  beforeAll(async () => {
+    pending = await dispatch('MANAGER_A', warehouseA, warehouseB, 2);
+  });
+
+  it('lista los traspasos en tránsito con días y valor al costo congelado', async () => {
+    const res = await ok(report('AUDITOR', 'in-transit'));
+
+    expect(res.body.data).toEqual([
+      {
+        transferId: pending,
+        originWarehouseId: warehouseA,
+        originCode: 'A',
+        originName: 'Bodega A',
+        destinationWarehouseId: warehouseB,
+        destinationCode: 'B',
+        destinationName: 'Bodega B',
+        dispatchedAt: expect.any(String),
+        daysInTransit: 0,
+        quantity: 2,
+        value: '208.2352',
+      },
+    ]);
+    expect(res.body.totals).toEqual({ transfers: 1, quantity: 2, value: '208.2352' });
+  });
+
+  it('los traspasos ya recibidos o resueltos no aparecen', async () => {
+    const res = await ok(report('ADMIN', 'in-transit'));
+    expect(res.body.data.map((r: { transferId: string }) => r.transferId)).toEqual([pending]);
+  });
+
+  it('el jefe del origen y el del destino lo ven; filtrar por una bodega ajena da 403', async () => {
+    expect((await ok(report('MANAGER_A', 'in-transit'))).body.totals.transfers).toBe(1);
+    expect((await ok(report('MANAGER_B', 'in-transit'))).body.totals.transfers).toBe(1);
+    expect((await report('MANAGER_B', 'in-transit', { warehouseId: warehouseA })).status).toBe(403);
+  });
+
+  it('el OPERATOR recibe 403', async () => {
+    expect((await report('OPERATOR_A', 'in-transit')).status).toBe(403);
+  });
+
+  it('Swagger documenta los reportes', async () => {
+    const res = await request(app).get('/api-docs.json');
+    for (const path of ['/api/reports/shrinkage', '/api/reports/in-transit']) {
+      expect(res.body.paths).toHaveProperty([path]);
+    }
+  });
+});
