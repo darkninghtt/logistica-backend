@@ -31,4 +31,27 @@ describe('logger', () => {
     expect(output).not.toContain('token-secreto');
     expect(output).not.toContain('sid=abc');
   });
+
+  it('no registra el ticket del WebSocket si llega en la URL', async () => {
+    const lines: string[] = [];
+    const logger = createLogger(
+      { LOG_LEVEL: 'info' },
+      {
+        write(line: string): void {
+          lines.push(line);
+        },
+      },
+    );
+    const app = express();
+    app.use(createHttpLogger(logger));
+    app.get('/api/realtime', (_req, res) => {
+      res.status(401).json({});
+    });
+
+    await request(app).get('/api/realtime?ticket=ticket-secreto&otro=1');
+
+    const output = lines.join('');
+    expect(output).not.toContain('ticket-secreto');
+    expect(output).toContain('/api/realtime?ticket=[oculto]&otro=1');
+  });
 });

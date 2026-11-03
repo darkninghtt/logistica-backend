@@ -501,6 +501,14 @@ export function buildOpenApiSpec(): object {
               },
             ],
           },
+          RealtimeTicket: {
+            type: 'object',
+            required: ['ticket', 'expiresIn'],
+            properties: {
+              ticket: { type: 'string', description: 'Aleatorio, de un solo uso' },
+              expiresIn: { type: 'integer', example: 30, description: 'Segundos de validez' },
+            },
+          },
           ErrorResponse: {
             type: 'object',
             required: ['code', 'message', 'correlationId'],

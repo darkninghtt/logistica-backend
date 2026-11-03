@@ -16,6 +16,7 @@ import { createWarehousesRepository } from '../../src/repositories/warehouses';
 import { createAuthService, type TokenService } from '../../src/services/auth';
 import { createArgon2Hasher } from '../../src/services/password-hasher';
 import { createProductsService } from '../../src/services/products';
+import { createRealtimeService, type RealtimeService } from '../../src/services/realtime';
 import { createSessionService } from '../../src/services/sessions';
 import { createStockService } from '../../src/services/stock';
 import { createStockQueryService } from '../../src/services/stock-queries';
@@ -34,6 +35,7 @@ export interface TestApp {
   tokens: TokenService;
   /** Dependencias con las que se armó la app (para volver a armarla con opciones extra). */
   deps: AppDeps;
+  realtime: RealtimeService;
 }
 
 /** Compone la app real (mismas piezas que main.ts) contra la BD de pruebas. */
@@ -52,6 +54,8 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
   const access = createWarehouseAccess({
     assignments: { warehouseIdsOf: (userId) => users.warehouseIdsOf(userId) },
   });
+  const realtime = createRealtimeService({ access });
+  const logger = pino({ level: 'silent' });
   const warehousesService = createWarehousesService({
     warehouses: createWarehousesRepository(pool),
     access,
@@ -79,7 +83,7 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
   });
   const userManagementService = createUserManagementService({ users, hasher });
   const deps: AppDeps = {
-    logger: pino({ level: 'silent' }),
+    logger,
     authService,
     tokens,
     warehousesService,
@@ -88,8 +92,9 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
     stockQueryService,
     transfersService,
     userManagementService,
+    realtimeService: realtime,
   };
-  return { app: createApp(deps), tokens, deps };
+  return { app: createApp(deps), tokens, deps, realtime };
 }
 
 /** Crea el ADMIN de pruebas (con la misma lógica del seed real). */
