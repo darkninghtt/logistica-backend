@@ -348,6 +348,13 @@ describe('GET /api/reports/kardex', () => {
   });
 });
 
+/** Lee el cuerpo como bytes (PDF) en vez de dejar que supertest lo interprete. */
+function binary(res: request.Response, done: (err: Error | null, body: Buffer) => void): void {
+  const chunks: Buffer[] = [];
+  res.on('data', (chunk: Buffer) => chunks.push(chunk));
+  res.on('end', () => done(null, Buffer.concat(chunks)));
+}
+
 /** Fecha de hoy (AAAA-MM-DD) en la zona horaria de los reportes. */
 function todayInBogota(offsetDays = 0): string {
   const date = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000);
@@ -430,6 +437,84 @@ describe('GET /api/reports/shrinkage', () => {
   });
 });
 
+describe('exportaciones', () => {
+  it('el kardex en CSV: descarga con nombre, BOM, tildes y una línea por fila', async () => {
+    const api = await ok(kardex('ADMIN', warehouseA));
+    const res = await ok(
+      report('ADMIN', 'kardex/export', {
+        warehouseId: warehouseA,
+        productId: product,
+        format: 'csv',
+      }),
+    );
+
+    expect(res.headers['content-type']).toBe('text/csv; charset=utf-8');
+    expect(res.headers['content-disposition']).toBe('attachment; filename=kardex-A-SKU-1.csv');
+    expect(res.text.charCodeAt(0)).toBe(0xfeff);
+    const lines = res.text.trimEnd().split('\r\n');
+    expect(lines[0]).toBe(
+      '﻿Fecha,Tipo,Referencia,Entrada,Salida,Saldo,Costo unitario,CPP,Valor del saldo',
+    );
+    expect(lines).toHaveLength(api.body.data.length + 1);
+    expect(res.text).toContain('Merma en tránsito,1 perdidas en tránsito · Una caja se perdió');
+    expect(res.text).toContain(`Traspaso ${outbound}`);
+    expect(res.text).toContain(',15,104.1176,104.1176,1561.7640');
+  });
+
+  it('el kardex en PDF: application/pdf, adjunto y no vacío', async () => {
+    const res = await request(app)
+      .get('/api/reports/kardex/export')
+      .query({ warehouseId: warehouseA, productId: product, format: 'pdf' })
+      .set(as('MANAGER_A'))
+      .buffer(true)
+      .parse(binary);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.headers['content-disposition']).toBe('attachment; filename=kardex-A-SKU-1.pdf');
+    expect(Buffer.isBuffer(res.body) && res.body.subarray(0, 4).toString()).toBe('%PDF');
+    expect(res.body.length).toBeGreaterThan(1000);
+  });
+
+  it('las mermas en CSV llevan los motivos traducidos y la fila de totales', async () => {
+    const res = await ok(report('AUDITOR', 'shrinkage/export', { format: 'csv' }));
+
+    expect(res.headers['content-disposition']).toBe('attachment; filename=mermas-inicio-a-hoy.csv');
+    const lines = res.text.trimEnd().split('\r\n');
+    expect(lines.slice(1)).toEqual([
+      'A · Bodega A,SKU-1,Tornillo,Merma,Daño,3,312.3528',
+      'A · Bodega A,SKU-1,Tornillo,Merma en tránsito,,1,90.0000',
+      'B · Bodega B,SKU-1,Tornillo,Merma,Robo,1,90.0000',
+      'Total,,,,,5,492.3528',
+    ]);
+  });
+
+  it('las mermas en PDF se generan', async () => {
+    const res = await request(app)
+      .get('/api/reports/shrinkage/export')
+      .query({ format: 'pdf', from: '2026-01-01' })
+      .set(as('ADMIN'))
+      .buffer(true)
+      .parse(binary);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('application/pdf');
+    expect(res.headers['content-disposition']).toContain('mermas-2026-01-01-a-hoy.pdf');
+    expect(res.body.subarray(0, 4).toString()).toBe('%PDF');
+  });
+
+  it('OPERATOR y jefe en bodega ajena reciben 403; un formato desconocido da 400', async () => {
+    const query = { warehouseId: warehouseA, productId: product, format: 'csv' };
+    expect((await report('OPERATOR_A', 'kardex/export', query)).status).toBe(403);
+    expect((await report('OPERATOR_A', 'shrinkage/export', { format: 'pdf' })).status).toBe(403);
+    expect(
+      (await report('MANAGER_B', 'kardex/export', query)).status,
+      'el jefe de B no exporta el kardex de A',
+    ).toBe(403);
+    expect((await report('ADMIN', 'kardex/export', { ...query, format: 'xls' })).status).toBe(400);
+  });
+});
+
 describe('GET /api/reports/in-transit', () => {
   let pending: string;
 
@@ -474,9 +559,14 @@ describe('GET /api/reports/in-transit', () => {
     expect((await report('OPERATOR_A', 'in-transit')).status).toBe(403);
   });
 
-  it('Swagger documenta los reportes', async () => {
+  it('Swagger documenta los reportes y las exportaciones', async () => {
     const res = await request(app).get('/api-docs.json');
-    for (const path of ['/api/reports/shrinkage', '/api/reports/in-transit']) {
+    for (const path of [
+      '/api/reports/kardex/export',
+      '/api/reports/shrinkage',
+      '/api/reports/shrinkage/export',
+      '/api/reports/in-transit',
+    ]) {
       expect(res.body.paths).toHaveProperty([path]);
     }
   });

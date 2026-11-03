@@ -15,7 +15,14 @@ import {
   type ShrinkageReportRow,
 } from '../domain/reports';
 import { sumValues, type StockMovement } from '../domain/stock';
-import type { InTransitQuery, KardexQuery, ShrinkageReportQuery } from '../schemas/reports';
+import type {
+  InTransitQuery,
+  KardexExportQuery,
+  KardexQuery,
+  ShrinkageExportQuery,
+  ShrinkageReportQuery,
+} from '../schemas/reports';
+import { kardexCsv, kardexPdf, shrinkageCsv, shrinkagePdf, type ReportFile } from './report-files';
 import type { WarehouseAccess } from './warehouse-access';
 
 /** Filtro de mermas ya resuelto: `warehouseIds` null significa todas las bodegas. */
@@ -57,7 +64,9 @@ export interface KardexPage extends CursorPage<KardexRow> {
 
 export interface ReportsService {
   kardex(query: KardexQuery, actor: Actor): Promise<KardexPage>;
+  exportKardex(query: KardexExportQuery, actor: Actor): Promise<ReportFile>;
   shrinkage(query: ShrinkageReportQuery, actor: Actor): Promise<ShrinkageReport>;
+  exportShrinkage(query: ShrinkageExportQuery, actor: Actor): Promise<ReportFile>;
   inTransit(query: InTransitQuery, actor: Actor): Promise<InTransitReport>;
 }
 
@@ -67,6 +76,9 @@ export interface ReportsDeps {
   /** Reloj (días en tránsito y fecha de generación); las pruebas lo fijan. */
   now?: () => Date;
 }
+
+/** Filas que se piden por vuelta al exportar el kardex completo. */
+const EXPORT_BATCH = 500;
 
 export function createReportsService({
   store,
@@ -126,7 +138,29 @@ export function createReportsService({
       return { ...toCursorPage(rows.map(toKardexRow), limit), ...subject };
     },
 
+    async exportKardex({ warehouseId, productId, format }, actor) {
+      const subject = await kardexSubject(warehouseId, productId, actor);
+      // Todo el kardex, por tandas con el mismo cursor que la API (sin OFFSET)
+      const rows: KardexRow[] = [];
+      let afterId: string | undefined;
+      for (;;) {
+        const batch = await store.listKardex(warehouseId, productId, EXPORT_BATCH, afterId);
+        rows.push(...batch.map(toKardexRow));
+        const last = batch.at(-1);
+        if (batch.length < EXPORT_BATCH || !last) break;
+        afterId = last.id;
+      }
+      const data = { ...subject, rows };
+      return format === 'csv' ? kardexCsv(data) : kardexPdf(data, now());
+    },
+
     shrinkage,
+
+    async exportShrinkage({ format, ...filters }, actor) {
+      const report = await shrinkage(filters, actor);
+      const data = { report, from: filters.from, to: filters.to };
+      return format === 'csv' ? shrinkageCsv(data) : shrinkagePdf(data, now());
+    },
 
     async inTransit({ warehouseId }, actor) {
       const records = await store.listInTransit(await scope(actor, warehouseId));

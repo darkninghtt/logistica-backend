@@ -62,6 +62,59 @@ import { requireRole } from '../middlewares/require-role';
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ * /api/reports/kardex/export:
+ *   get:
+ *     tags: [Reportes]
+ *     summary: Exporta el kardex completo a CSV o PDF
+ *     description: >
+ *       Mismo contenido y permisos que el kardex, sin paginar. El CSV va en UTF-8 con BOM (Excel
+ *       muestra bien las tildes) y neutraliza los textos que empiezan como fórmula; el PDF se
+ *       genera en el servidor por streaming.
+ *     parameters:
+ *       - in: query
+ *         name: warehouseId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: productId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: format
+ *         required: true
+ *         schema: { type: string, enum: [csv, pdf] }
+ *     responses:
+ *       200:
+ *         description: Archivo para descargar (Content-Disposition attachment)
+ *         content:
+ *           text/csv:
+ *             schema: { type: string, format: binary }
+ *           application/pdf:
+ *             schema: { type: string, format: binary }
+ *       400:
+ *         description: Faltan parámetros o el formato no es csv ni pdf
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Token ausente, inválido o expirado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: OPERATOR, o la bodega no está asignada al jefe de bodega
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: La bodega o el producto no existen
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  * /api/reports/shrinkage:
  *   get:
  *     tags: [Reportes]
@@ -94,6 +147,53 @@ import { requireRole } from '../middlewares/require-role';
  *               $ref: '#/components/schemas/ShrinkageReport'
  *       400:
  *         description: Parámetros inválidos o la fecha inicial es posterior a la final
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Token ausente, inválido o expirado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: OPERATOR, o la bodega no está asignada al jefe de bodega
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ * /api/reports/shrinkage/export:
+ *   get:
+ *     tags: [Reportes]
+ *     summary: Exporta el reporte de mermas a CSV o PDF (con la fila de totales)
+ *     parameters:
+ *       - in: query
+ *         name: warehouseId
+ *         description: Sin bodega, todas las visibles para el usuario
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: from
+ *         description: Fecha inicial (AAAA-MM-DD, inclusive, hora de Colombia)
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: to
+ *         description: Fecha final (AAAA-MM-DD, inclusive, hora de Colombia)
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: format
+ *         required: true
+ *         schema: { type: string, enum: [csv, pdf] }
+ *     responses:
+ *       200:
+ *         description: Archivo para descargar (Content-Disposition attachment)
+ *         content:
+ *           text/csv:
+ *             schema: { type: string, format: binary }
+ *           application/pdf:
+ *             schema: { type: string, format: binary }
+ *       400:
+ *         description: Parámetros inválidos o el formato no es csv ni pdf
  *         content:
  *           application/json:
  *             schema:
@@ -153,7 +253,9 @@ export function createReportsRouter(controller: ReportsController): Router {
   // Mismos permisos para todos los reportes (datos de costo); el servicio lo repite
   const canView = requireRole('ADMIN', 'AUDITOR', 'WAREHOUSE_MANAGER');
   router.get('/kardex', canView, controller.kardex);
+  router.get('/kardex/export', canView, controller.exportKardex);
   router.get('/shrinkage', canView, controller.shrinkage);
+  router.get('/shrinkage/export', canView, controller.exportShrinkage);
   router.get('/in-transit', canView, controller.inTransit);
   return router;
 }
