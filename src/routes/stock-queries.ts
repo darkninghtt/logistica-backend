@@ -27,7 +27,7 @@ import type { StockQueryController } from '../controllers/stock-queries';
  *             schema:
  *               $ref: '#/components/schemas/StockLevelPage'
  *       400:
- *         description: Falta la bodega o los parámetros son inválidos
+ *         description: Falta la bodega, o un parámetro o el cursor son inválidos
  *         content:
  *           application/json:
  *             schema:
@@ -54,7 +54,11 @@ import type { StockQueryController } from '../controllers/stock-queries';
  *   get:
  *     tags: [Stock]
  *     summary: Historial de movimientos de una bodega, con el saldo y el costo después de cada uno
- *     description: Mismo alcance que las existencias. El OPERATOR no recibe los campos de costo (`unitCost`, `balanceAvgCost`).
+ *     description: >
+ *       Mismo alcance que las existencias. El OPERATOR no recibe los campos de costo (`unitCost`,
+ *       `balanceAvgCost`). Paginación por cursor (keyset sobre el id del movimiento): la primera
+ *       página va sin `cursor` y las siguientes con el `nextCursor` de la anterior. Los movimientos
+ *       que entran mientras se recorre no hacen repetir ni saltar filas.
  *     parameters:
  *       - in: query
  *         name: warehouseId
@@ -65,14 +69,21 @@ import type { StockQueryController } from '../controllers/stock-queries';
  *         description: Filtra los movimientos de un producto
  *         schema: { type: string, format: uuid }
  *       - in: query
- *         name: page
- *         schema: { type: integer, minimum: 1, default: 1 }
+ *         name: type
+ *         description: Filtra por tipo de movimiento
+ *         schema:
+ *           type: string
+ *           enum: [ENTRY, TRANSFER_OUT, TRANSFER_IN, SHRINKAGE, TRANSIT_SHRINKAGE, ADJUSTMENT_IN]
  *       - in: query
- *         name: pageSize
+ *         name: limit
  *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+ *       - in: query
+ *         name: cursor
+ *         description: El `nextCursor` de la página anterior
+ *         schema: { type: string }
  *     responses:
  *       200:
- *         description: Página de movimientos, del más nuevo al más antiguo
+ *         description: Movimientos del más nuevo al más antiguo
  *         content:
  *           application/json:
  *             schema:

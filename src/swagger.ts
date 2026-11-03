@@ -317,12 +317,14 @@ export function buildOpenApiSpec(): object {
           },
           StockMovementPage: {
             type: 'object',
-            required: ['data', 'page', 'pageSize', 'total'],
+            required: ['data', 'nextCursor'],
             properties: {
               data: { type: 'array', items: { $ref: '#/components/schemas/StockMovementItem' } },
-              page: { type: 'integer' },
-              pageSize: { type: 'integer' },
-              total: { type: 'integer' },
+              nextCursor: {
+                type: 'string',
+                nullable: true,
+                description: 'Se envía como `cursor` para pedir la página siguiente; null al final',
+              },
             },
           },
           TransferCreateInput: {

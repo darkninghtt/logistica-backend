@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NotFoundError } from '../../src/domain/errors';
+import { encodeCursor } from '../../src/domain/page';
 import type { StockLevelItem, StockMovementItem } from '../../src/domain/stock-queries';
 import { createStockQueryService, type StockQueryStore } from '../../src/services/stock-queries';
 import { ADMIN_ACTOR, allowAllAccess } from '../helpers/actors';
@@ -40,7 +41,7 @@ function fakeStore(overrides: Partial<StockQueryStore> = {}): StockQueryStore {
     warehouseExists: vi.fn(async () => true),
     productExists: vi.fn(async () => true),
     listLevels: vi.fn(async () => ({ rows: [level], total: 41 })),
-    listMovements: vi.fn(async () => ({ rows: [movement], total: 41 })),
+    listMovements: vi.fn(async () => [movement]),
     ...overrides,
   };
 }
@@ -69,27 +70,60 @@ describe('StockQueryService.listLevels', () => {
 });
 
 describe('StockQueryService.listMovements', () => {
-  it('sin producto no filtra y calcula el desplazamiento', async () => {
+  const at = (id: string): StockMovementItem => ({ ...movement, id });
+
+  it('primera página sin filtros: pide una fila de más y, si no llega, nextCursor es null', async () => {
     const store = fakeStore();
     const result = await createStockQueryService({ store, access: allowAllAccess }).listMovements(
-      { warehouseId: WAREHOUSE, page: 2, pageSize: 10 },
+      { warehouseId: WAREHOUSE, limit: 10 },
       ADMIN_ACTOR,
     );
 
     expect(store.productExists).not.toHaveBeenCalled();
-    expect(store.listMovements).toHaveBeenCalledWith(WAREHOUSE, undefined, 10, 10);
-    expect(result).toEqual({ data: [movement], page: 2, pageSize: 10, total: 41 });
+    expect(store.listMovements).toHaveBeenCalledWith(
+      { warehouseId: WAREHOUSE, productId: undefined, type: undefined },
+      11,
+      undefined,
+    );
+    expect(result).toEqual({ data: [movement], nextCursor: null });
   });
 
-  it('con producto lo valida y lo pasa como filtro', async () => {
+  it('si llega la fila de más, la descarta y el cursor apunta a la última entregada', async () => {
+    const store = fakeStore({ listMovements: vi.fn(async () => [at('9'), at('8'), at('7')]) });
+    const result = await createStockQueryService({ store, access: allowAllAccess }).listMovements(
+      { warehouseId: WAREHOUSE, limit: 2 },
+      ADMIN_ACTOR,
+    );
+
+    expect(result.data.map((m) => m.id)).toEqual(['9', '8']);
+    expect(result.nextCursor).toBe(encodeCursor('8'));
+  });
+
+  it('pasa el cursor (ya decodificado), el producto y el tipo como filtros', async () => {
     const store = fakeStore();
     await createStockQueryService({ store, access: allowAllAccess }).listMovements(
-      { warehouseId: WAREHOUSE, productId: PRODUCT, page: 1, pageSize: 20 },
+      { warehouseId: WAREHOUSE, productId: PRODUCT, type: 'SHRINKAGE', limit: 20, cursor: '8' },
       ADMIN_ACTOR,
     );
 
     expect(store.productExists).toHaveBeenCalledWith(PRODUCT);
-    expect(store.listMovements).toHaveBeenCalledWith(WAREHOUSE, PRODUCT, 20, 0);
+    expect(store.listMovements).toHaveBeenCalledWith(
+      { warehouseId: WAREHOUSE, productId: PRODUCT, type: 'SHRINKAGE' },
+      21,
+      '8',
+    );
+  });
+
+  it('el OPERATOR recibe la página sin costos y con el mismo cursor', async () => {
+    const store = fakeStore({ listMovements: vi.fn(async () => [at('9'), at('8')]) });
+    const result = await createStockQueryService({ store, access: allowAllAccess }).listMovements(
+      { warehouseId: WAREHOUSE, limit: 1 },
+      { userId: 'u-op', role: 'OPERATOR' },
+    );
+
+    expect(result.nextCursor).toBe(encodeCursor('9'));
+    expect(result.data[0]).not.toHaveProperty('unitCost');
+    expect(result.data[0]).not.toHaveProperty('balanceAvgCost');
   });
 
   it('lanza NotFoundError si la bodega no existe', async () => {
@@ -97,7 +131,7 @@ describe('StockQueryService.listMovements', () => {
     const service = createStockQueryService({ store, access: allowAllAccess });
 
     await expect(
-      service.listMovements({ warehouseId: WAREHOUSE, page: 1, pageSize: 20 }, ADMIN_ACTOR),
+      service.listMovements({ warehouseId: WAREHOUSE, limit: 20 }, ADMIN_ACTOR),
     ).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -106,10 +140,7 @@ describe('StockQueryService.listMovements', () => {
     const service = createStockQueryService({ store, access: allowAllAccess });
 
     await expect(
-      service.listMovements(
-        { warehouseId: WAREHOUSE, productId: PRODUCT, page: 1, pageSize: 20 },
-        ADMIN_ACTOR,
-      ),
+      service.listMovements({ warehouseId: WAREHOUSE, productId: PRODUCT, limit: 20 }, ADMIN_ACTOR),
     ).rejects.toBeInstanceOf(NotFoundError);
     expect(store.listMovements).not.toHaveBeenCalled();
   });

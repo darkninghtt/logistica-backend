@@ -92,24 +92,23 @@ export function createStockQueryRepository(db: Pool | PoolClient): StockQuerySto
       return { rows: rows.map(toLevelItem), total: Number(count.rows[0]?.total ?? 0) };
     },
 
-    async listMovements(warehouseId, productId, limit, offset) {
-      // `$2::uuid IS NULL` deja el filtro por producto como opcional con una sola consulta
+    async listMovements({ warehouseId, productId, type }, limit, beforeId) {
+      // `$n IS NULL OR ...` deja cada filtro como opcional con una sola consulta parametrizada.
+      // Paginación por keyset: `id < cursor` en vez de OFFSET (no se corre si entran filas nuevas)
       const { rows } = await db.query<MovementRow>(
         `SELECT m.id, m.product_id, m.warehouse_id, m.type, m.quantity, m.unit_cost,
                 m.balance_qty, m.balance_avg_cost, m.reason, m.transfer_id, m.created_by, m.created_at, p.sku, p.name
          FROM stock_movements m
          JOIN products p ON p.id = m.product_id
-         WHERE m.warehouse_id = $1 AND ($2::uuid IS NULL OR m.product_id = $2::uuid)
+         WHERE m.warehouse_id = $1
+           AND ($2::uuid IS NULL OR m.product_id = $2::uuid)
+           AND ($3::text IS NULL OR m.type = $3::text)
+           AND ($4::bigint IS NULL OR m.id < $4::bigint)
          ORDER BY m.id DESC
-         LIMIT $3 OFFSET $4`,
-        [warehouseId, productId ?? null, limit, offset],
+         LIMIT $5`,
+        [warehouseId, productId ?? null, type ?? null, beforeId ?? null, limit],
       );
-      const count = await db.query<{ total: string }>(
-        `SELECT count(*) AS total FROM stock_movements
-         WHERE warehouse_id = $1 AND ($2::uuid IS NULL OR product_id = $2::uuid)`,
-        [warehouseId, productId ?? null],
-      );
-      return { rows: rows.map(toMovementItem), total: Number(count.rows[0]?.total ?? 0) };
+      return rows.map(toMovementItem);
     },
   };
 }
