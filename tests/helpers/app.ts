@@ -6,6 +6,7 @@ import { withTransaction } from '../../src/db';
 import type { EventPublisher } from '../../src/domain/realtime';
 import { createRefreshTokensRepository } from '../../src/repositories/refresh-tokens';
 import { createProductsRepository } from '../../src/repositories/products';
+import { createReportsRepository } from '../../src/repositories/reports';
 import { createStockRepository } from '../../src/repositories/stock';
 import { createStockQueryRepository } from '../../src/repositories/stock-queries';
 import {
@@ -18,6 +19,7 @@ import { createAuthService, type TokenService } from '../../src/services/auth';
 import { createArgon2Hasher } from '../../src/services/password-hasher';
 import { createProductsService } from '../../src/services/products';
 import { createRealtimeService, type RealtimeService } from '../../src/services/realtime';
+import { createReportsService } from '../../src/services/reports';
 import { createSessionService } from '../../src/services/sessions';
 import { createStockService } from '../../src/services/stock';
 import { createStockQueryService } from '../../src/services/stock-queries';
@@ -103,6 +105,7 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
     transfersService,
     userManagementService,
     realtimeService: realtime,
+    reportsService: createReportsService({ store: createReportsRepository(pool), access }),
   };
   return { app: createApp(deps), tokens, deps, realtime, queue };
 }

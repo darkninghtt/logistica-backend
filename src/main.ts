@@ -6,6 +6,7 @@ import { correlationContext, createLogger } from './logger';
 import { attachRealtime } from './realtime-server';
 import { createRefreshTokensRepository } from './repositories/refresh-tokens';
 import { createProductsRepository } from './repositories/products';
+import { createReportsRepository } from './repositories/reports';
 import { createStockRepository } from './repositories/stock';
 import { createStockQueryRepository } from './repositories/stock-queries';
 import {
@@ -18,6 +19,7 @@ import { createAuthService } from './services/auth';
 import { createArgon2Hasher } from './services/password-hasher';
 import { createProductsService } from './services/products';
 import { createRealtimeService } from './services/realtime';
+import { createReportsService } from './services/reports';
 import { createSessionService } from './services/sessions';
 import { createStockService } from './services/stock';
 import { createStockQueryService } from './services/stock-queries';
@@ -94,6 +96,7 @@ function main(): void {
     access,
     events,
   });
+  const reportsService = createReportsService({ store: createReportsRepository(pool), access });
   const userManagementService = createUserManagementService({
     users: usersRepository,
     hasher: createArgon2Hasher(),
@@ -109,6 +112,7 @@ function main(): void {
     transfersService,
     userManagementService,
     realtimeService,
+    reportsService,
     trustProxy: config.TRUST_PROXY,
     cookieSecure: config.COOKIE_SECURE,
     rateLimits: {
