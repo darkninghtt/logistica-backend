@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { RequestHandler } from 'express';
-import pino, { type DestinationStream, type Logger } from 'pino';
+import pino, { type DestinationStream, type Logger, type SerializedRequest } from 'pino';
 import pinoHttp, { type HttpLogger } from 'pino-http';
 import type { Config } from './config';
 
@@ -34,12 +34,25 @@ function resolveCorrelationId(req: IncomingMessage, res: ServerResponse): string
   return id;
 }
 
+/** Oculta el ticket del WebSocket si viene en la URL: es un secreto de un solo uso. */
+export function hideTicket(url: string): string {
+  return url.replace(/([?&]ticket=)[^&]*/g, '$1[oculto]');
+}
+
 /** Middleware que registra cada petición con pino; `req.id` es el correlation id. */
 export function createHttpLogger(logger: Logger): HttpLogger {
   return pinoHttp({
     logger,
     genReqId: resolveCorrelationId,
     customProps: (req) => ({ correlationId: req.id }),
+    // Recibe la petición ya serializada por pino (wrapSerializers): el ticket sale en la URL y en query
+    serializers: {
+      req: (req: SerializedRequest) => ({
+        ...req,
+        url: hideTicket(req.url),
+        query: 'ticket' in req.query ? { ...req.query, ticket: '[oculto]' } : req.query,
+      }),
+    },
   });
 }
 

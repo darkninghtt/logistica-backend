@@ -1,7 +1,9 @@
 import { createApp } from './app';
 import { loadConfig } from './config';
 import { createPool, createTransactionRunner } from './db';
+import type { EventPublisher } from './domain/realtime';
 import { correlationContext, createLogger } from './logger';
+import { attachRealtime } from './realtime-server';
 import { createRefreshTokensRepository } from './repositories/refresh-tokens';
 import { createProductsRepository } from './repositories/products';
 import { createStockRepository } from './repositories/stock';
@@ -15,6 +17,7 @@ import { createWarehousesRepository } from './repositories/warehouses';
 import { createAuthService } from './services/auth';
 import { createArgon2Hasher } from './services/password-hasher';
 import { createProductsService } from './services/products';
+import { createRealtimeService } from './services/realtime';
 import { createSessionService } from './services/sessions';
 import { createStockService } from './services/stock';
 import { createStockQueryService } from './services/stock-queries';
@@ -23,6 +26,7 @@ import { createTransfersService } from './services/transfers';
 import { createUserManagementService } from './services/user-management';
 import { createWarehousesService } from './services/warehouses';
 import { createWarehouseAccess } from './services/warehouse-access';
+import { createTaskQueue } from './task-queue';
 
 function main(): void {
   const config = loadConfig(process.env);
@@ -58,6 +62,12 @@ function main(): void {
   const access = createWarehouseAccess({
     assignments: { warehouseIdsOf: (userId) => usersRepository.warehouseIdsOf(userId) },
   });
+  // Tiempo real: los servicios encolan el aviso después del COMMIT y la cola lo envía con reintentos
+  const realtimeService = createRealtimeService({ access });
+  const queue = createTaskQueue({ logger, correlationId: () => correlationContext.getStore() });
+  const events: EventPublisher = {
+    publish: (event) => queue.enqueue(event.type, () => realtimeService.publish(event)),
+  };
   const warehousesService = createWarehousesService({
     warehouses: createWarehousesRepository(pool),
     access,
@@ -65,6 +75,7 @@ function main(): void {
   const productsService = createProductsService({ products: createProductsRepository(pool) });
   const stockService = createStockService({
     access,
+    events,
     runInTransaction: (work) => withTransaction((client) => work(createStockRepository(client))),
   });
   const stockQueryService = createStockQueryService({
@@ -81,6 +92,7 @@ function main(): void {
         }),
       ),
     access,
+    events,
   });
   const userManagementService = createUserManagementService({
     users: usersRepository,
@@ -96,6 +108,7 @@ function main(): void {
     stockQueryService,
     transfersService,
     userManagementService,
+    realtimeService,
     trustProxy: config.TRUST_PROXY,
     cookieSecure: config.COOKIE_SECURE,
     rateLimits: {
@@ -115,9 +128,11 @@ function main(): void {
     publicDir: config.PUBLIC_DIR,
   });
 
-  app.listen(config.PORT, () => {
+  const server = app.listen(config.PORT, () => {
     logger.info({ port: config.PORT, env: config.NODE_ENV }, 'Servidor escuchando');
   });
+  // El WebSocket comparte el servidor HTTP: mismo origen y puerto que la API
+  attachRealtime(server, { realtime: realtimeService, logger });
 }
 
 try {
