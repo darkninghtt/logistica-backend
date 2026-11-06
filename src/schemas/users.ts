@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { roleSchema } from '../domain/user';
+import { idSchema, pageOf, timestampSchema } from './common';
 
 const email = z.string().trim().toLowerCase().pipe(z.email('no es un correo válido'));
 const name = z.string().trim().min(1, 'es obligatorio').max(100, 'es demasiado largo');
@@ -37,3 +38,26 @@ export const userWarehousesBodySchema = z.object({
 
 export type CreateUserInput = z.infer<typeof createUserBodySchema>;
 export type UpdateUserInput = z.infer<typeof updateUserBodySchema>;
+
+/** Usuario público (login, refresh y /api/auth/me). */
+export const publicUserSchema = z.strictObject({
+  id: idSchema,
+  name: z.string(),
+  email: z.email(),
+  role: roleSchema,
+});
+
+/** Usuario en la administración (/api/users). */
+export const managedUserSchema = publicUserSchema.extend({
+  active: z.boolean(),
+  warehouseIds: z.array(idSchema),
+  createdAt: timestampSchema,
+});
+
+export const managedUserPageSchema = pageOf(managedUserSchema);
+
+/** Respuesta de PUT /api/users/:id/warehouses. */
+export const userWarehousesSchema = z.strictObject({
+  userId: idSchema,
+  warehouseIds: z.array(idSchema),
+});

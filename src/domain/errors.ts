@@ -1,13 +1,17 @@
-export type ErrorCode =
-  | 'VALIDATION_ERROR'
-  | 'UNAUTHORIZED'
-  | 'FORBIDDEN'
-  | 'NOT_FOUND'
-  | 'CONFLICT'
-  | 'INVALID_TRANSITION'
-  | 'INSUFFICIENT_STOCK'
-  | 'TOO_MANY_REQUESTS'
-  | 'INTERNAL_ERROR';
+/** Códigos de error estables que viajan en `{ code, message, correlationId }`. */
+export const ERROR_CODES = [
+  'VALIDATION_ERROR',
+  'UNAUTHORIZED',
+  'FORBIDDEN',
+  'NOT_FOUND',
+  'CONFLICT',
+  'INVALID_TRANSITION',
+  'INSUFFICIENT_STOCK',
+  'TOO_MANY_REQUESTS',
+  'INTERNAL_ERROR',
+] as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[number];
 
 /** Error de dominio con código estable y estado HTTP. El middleware global lo traduce a la respuesta. */
 export class AppError extends Error {
