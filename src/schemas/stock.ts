@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { COST_PATTERN, MAX_QUANTITY, SHRINKAGE_REASONS } from '../domain/stock';
+import { COST_PATTERN, MAX_QUANTITY, MOVEMENT_TYPES, SHRINKAGE_REASONS } from '../domain/stock';
+import { decimalSchema, idSchema, timestampSchema } from './common';
 
 /** Cuerpo de POST /api/stock/entries. El costo viaja como string para no perder decimales. */
 export const stockEntryBodySchema = z.object({
@@ -24,3 +25,42 @@ export const stockShrinkageBodySchema = z.object({
 });
 
 export type StockShrinkageInput = z.infer<typeof stockShrinkageBodySchema>;
+
+const NO_COST_FOR_OPERATOR = 'No se envía al OPERATOR';
+
+/** Existencias de un producto en una bodega. Sin costos para el OPERATOR. */
+export const stockLevelSchema = z.strictObject({
+  productId: idSchema,
+  warehouseId: idSchema,
+  quantity: z.int().meta({ example: 20 }),
+  avgCost: decimalSchema
+    .optional()
+    .meta({ description: `Costo promedio ponderado. ${NO_COST_FOR_OPERATOR}` }),
+  totalValue: decimalSchema
+    .optional()
+    .meta({ description: `quantity × avgCost. ${NO_COST_FOR_OPERATOR}` }),
+});
+
+/** Movimiento del libro. Sin costos para el OPERATOR. */
+export const stockMovementSchema = z.strictObject({
+  id: z.string().meta({ example: '1' }),
+  productId: idSchema,
+  warehouseId: idSchema,
+  type: z.enum(MOVEMENT_TYPES),
+  quantity: z.int().meta({ example: 10 }),
+  unitCost: decimalSchema.optional().meta({ description: NO_COST_FOR_OPERATOR }),
+  balanceQty: z.int().meta({ description: 'Saldo después del movimiento' }),
+  balanceAvgCost: decimalSchema
+    .optional()
+    .meta({ description: `Costo promedio después del movimiento. ${NO_COST_FOR_OPERATOR}` }),
+  reason: z.string().nullable().meta({ description: 'Motivo (mermas, ajustes y resoluciones)' }),
+  transferId: idSchema.nullable().meta({ description: 'Traspaso que originó el movimiento' }),
+  createdBy: idSchema,
+  createdAt: timestampSchema,
+});
+
+/** Respuesta de una entrada o de una merma: el movimiento y el saldo que dejó. */
+export const stockEntryResponseSchema = z.strictObject({
+  movement: stockMovementSchema,
+  stockLevel: stockLevelSchema,
+});
