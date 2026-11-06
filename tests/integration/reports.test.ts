@@ -1,6 +1,10 @@
 import type { Pool } from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createReportsRepository } from '../../src/repositories/reports';
+import { createUsersRepository } from '../../src/repositories/users';
+import { createReportsService } from '../../src/services/reports';
+import { createWarehouseAccess } from '../../src/services/warehouse-access';
 import { ADMIN, buildTestApp, seedTestAdmin } from '../helpers/app';
 import { createTestPool, truncateAll } from '../helpers/db';
 
@@ -569,5 +573,84 @@ describe('GET /api/reports/in-transit', () => {
     ]) {
       expect(res.body.paths).toHaveProperty([path]);
     }
+  });
+});
+
+describe('GET /api/reports/summary', () => {
+  // Estado al final de los bloques de arriba: A con 12 u a $104.1176 (2 en tránsito hacia B),
+  // B con 5 u a $90; traspasos: uno recibido, uno resuelto y uno en tránsito; mermas de hoy:
+  // 3 u DAMAGE en A ($312.3528), 1 u en tránsito registrada en A ($90) y 1 u THEFT en B ($90).
+  const STATUSES = {
+    DRAFT: 0,
+    IN_TRANSIT: 1,
+    RECEIVED: 1,
+    DISCREPANCY: 0,
+    RESOLVED: 1,
+    CANCELLED: 0,
+  };
+
+  it('el ADMIN ve todas las bodegas con valores exactos', async () => {
+    const res = await ok(report('ADMIN', 'summary'));
+
+    expect(res.body).toEqual({
+      inventoryValueByWarehouse: [
+        { warehouseId: warehouseA, code: 'A', name: 'Bodega A', value: '1249.4112' },
+        { warehouseId: warehouseB, code: 'B', name: 'Bodega B', value: '450.0000' },
+      ],
+      transfersByStatus: STATUSES,
+      shrinkageLast30Days: { quantity: 5, value: '492.3528' },
+      inTransitValue: '208.2352',
+    });
+  });
+
+  it('el AUDITOR ve lo mismo que el ADMIN', async () => {
+    const admin = await ok(report('ADMIN', 'summary'));
+    const auditor = await ok(report('AUDITOR', 'summary'));
+    expect(auditor.body).toEqual(admin.body);
+  });
+
+  it('el jefe de bodega ve solo su bodega', async () => {
+    const res = await ok(report('MANAGER_A', 'summary'));
+
+    expect(res.body.inventoryValueByWarehouse).toEqual([
+      { warehouseId: warehouseA, code: 'A', name: 'Bodega A', value: '1249.4112' },
+    ]);
+    // Los tres traspasos tienen a A como origen o destino
+    expect(res.body.transfersByStatus).toEqual(STATUSES);
+    expect(res.body.shrinkageLast30Days).toEqual({ quantity: 4, value: '402.3528' });
+    expect(res.body.inTransitValue).toBe('208.2352');
+
+    const b = await ok(report('MANAGER_B', 'summary'));
+    expect(b.body.inventoryValueByWarehouse.map((w: { code: string }) => w.code)).toEqual(['B']);
+    expect(b.body.shrinkageLast30Days).toEqual({ quantity: 1, value: '90.0000' });
+  });
+
+  it('las mermas de hace más de 30 días no cuentan', async () => {
+    // El libro es inmutable (no se pueden envejecer las mermas): se adelanta el reloj del servicio
+    const in31Days = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000);
+    const users = createUsersRepository(pool);
+    const service = createReportsService({
+      store: createReportsRepository(pool),
+      access: createWarehouseAccess({
+        assignments: { warehouseIdsOf: (userId) => users.warehouseIdsOf(userId) },
+      }),
+      now: () => in31Days,
+    });
+
+    const summary = await service.summary({ userId: 'u-admin', role: 'ADMIN' });
+
+    expect(summary.shrinkageLast30Days).toEqual({ quantity: 0, value: '0.0000' });
+    expect(summary.inTransitValue).toBe('208.2352');
+  });
+
+  it('el OPERATOR recibe 403', async () => {
+    const res = await report('OPERATOR_A', 'summary');
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN');
+  });
+
+  it('Swagger lo documenta', async () => {
+    const res = await request(app).get('/api-docs.json');
+    expect(res.body.paths).toHaveProperty(['/api/reports/summary']);
   });
 });

@@ -17,6 +17,7 @@ export interface ReportsController {
   shrinkage: RequestHandler;
   exportShrinkage: RequestHandler;
   inTransit: RequestHandler;
+  summary: RequestHandler;
 }
 
 /** Envía el archivo como descarga: texto de una vez o, si es un stream (PDF), por partes. */
@@ -55,6 +56,10 @@ export function createReportsController(service: ReportsService): ReportsControl
     async inTransit(req, res) {
       const query = parseWith(inTransitQuerySchema, req.query);
       res.json(await service.inTransit(query, getActor(req)));
+    },
+
+    async summary(req, res) {
+      res.json(await service.summary(getActor(req)));
     },
   };
 }

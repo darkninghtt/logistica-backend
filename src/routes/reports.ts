@@ -247,6 +247,35 @@ import { requireRole } from '../middlewares/require-role';
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ * /api/reports/summary:
+ *   get:
+ *     tags: [Reportes]
+ *     summary: Totales del dashboard
+ *     description: >
+ *       Valor del inventario por bodega activa (cantidad × costo promedio), traspasos por estado,
+ *       mermas de los últimos 30 días (de bodega y en tránsito) y valor de la mercancía en tránsito
+ *       al costo congelado. ADMIN y AUDITOR ven todas las bodegas; el jefe de bodega, solo las
+ *       suyas (los traspasos cuentan si su bodega es origen o destino). Valores como texto con 4
+ *       decimales.
+ *     responses:
+ *       200:
+ *         description: Resumen
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/DashboardSummary'
+ *       401:
+ *         description: Token ausente, inválido o expirado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: OPERATOR
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 export function createReportsRouter(controller: ReportsController): Router {
   const router = Router();
@@ -257,5 +286,6 @@ export function createReportsRouter(controller: ReportsController): Router {
   router.get('/shrinkage', canView, controller.shrinkage);
   router.get('/shrinkage/export', canView, controller.exportShrinkage);
   router.get('/in-transit', canView, controller.inTransit);
+  router.get('/summary', canView, controller.summary);
   return router;
 }

@@ -4,7 +4,10 @@ import { toCursorPage, type CursorPage } from '../domain/page';
 import {
   REPORT_ROLES,
   REPORT_TIME_ZONE,
+  countByStatus,
   daysInTransit,
+  shrinkageWindowStart,
+  type DashboardSummary,
   toKardexRow,
   type InTransitReport,
   type InTransitReportRow,
@@ -13,7 +16,9 @@ import {
   type ReportWarehouse,
   type ShrinkageReport,
   type ShrinkageReportRow,
+  type WarehouseInventoryValue,
 } from '../domain/reports';
+import type { TransferStatus } from '../domain/transfer';
 import { sumValues, type StockMovement } from '../domain/stock';
 import type {
   InTransitQuery,
@@ -55,6 +60,17 @@ export interface ReportsStore {
   listShrinkage(filter: ShrinkageFilter): Promise<ShrinkageReportRow[]>;
   /** Traspasos IN_TRANSIT con origen o destino entre `warehouseIds` (null: todos). */
   listInTransit(warehouseIds: string[] | null): Promise<InTransitRecord[]>;
+  /** Valor del inventario de cada bodega activa entre `warehouseIds` (null: todas), 0 si no tiene stock. */
+  inventoryByWarehouse(warehouseIds: string[] | null): Promise<WarehouseInventoryValue[]>;
+  /** Cuántos traspasos hay en cada estado, con origen o destino entre `warehouseIds`. */
+  countTransfersByStatus(
+    warehouseIds: string[] | null,
+  ): Promise<{ status: TransferStatus; count: number }[]>;
+  /** Mermas (de bodega y en tránsito) desde `since` en `warehouseIds`: cantidad y valor. */
+  shrinkageTotalsSince(
+    warehouseIds: string[] | null,
+    since: Date,
+  ): Promise<{ quantity: number; value: string }>;
 }
 
 export interface KardexPage extends CursorPage<KardexRow> {
@@ -68,6 +84,8 @@ export interface ReportsService {
   shrinkage(query: ShrinkageReportQuery, actor: Actor): Promise<ShrinkageReport>;
   exportShrinkage(query: ShrinkageExportQuery, actor: Actor): Promise<ReportFile>;
   inTransit(query: InTransitQuery, actor: Actor): Promise<InTransitReport>;
+  /** Totales del dashboard, solo de las bodegas que quien lo pide puede ver. */
+  summary(actor: Actor): Promise<DashboardSummary>;
 }
 
 export interface ReportsDeps {
@@ -176,6 +194,22 @@ export function createReportsService({
           quantity: data.reduce((sum, row) => sum + row.quantity, 0),
           value: sumValues(data.map((row) => row.value)),
         },
+      };
+    },
+
+    async summary(actor) {
+      const warehouseIds = await scope(actor, undefined);
+      const [inventory, statusCounts, shrinkageLast30Days, inTransit] = await Promise.all([
+        store.inventoryByWarehouse(warehouseIds),
+        store.countTransfersByStatus(warehouseIds),
+        store.shrinkageTotalsSince(warehouseIds, shrinkageWindowStart(now())),
+        store.listInTransit(warehouseIds),
+      ]);
+      return {
+        inventoryValueByWarehouse: inventory,
+        transfersByStatus: countByStatus(statusCounts),
+        shrinkageLast30Days,
+        inTransitValue: sumValues(inTransit.map((transfer) => transfer.value)),
       };
     },
   };

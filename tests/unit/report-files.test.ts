@@ -102,6 +102,9 @@ describe('ReportsService: mermas y en tránsito', () => {
       findProduct: vi.fn(async () => null),
       listKardex: vi.fn(async () => []),
       listShrinkage: vi.fn(async () => [row('208.2352', 2), row('90.0000', 1)]),
+      inventoryByWarehouse: vi.fn(async () => []),
+      countTransfersByStatus: vi.fn(async () => []),
+      shrinkageTotalsSince: vi.fn(async () => ({ quantity: 0, value: '0.0000' })),
       listInTransit: vi.fn(async () => [
         {
           transferId: 't-1',

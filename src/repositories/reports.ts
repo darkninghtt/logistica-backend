@@ -4,7 +4,9 @@ import type {
   ReportWarehouse,
   ShrinkageReportRow,
   ShrinkageType,
+  WarehouseInventoryValue,
 } from '../domain/reports';
+import type { TransferStatus } from '../domain/transfer';
 import type { MovementType, StockMovement } from '../domain/stock';
 import type { InTransitRecord, ReportsStore } from '../services/reports';
 
@@ -63,6 +65,13 @@ interface InTransitRow {
   destination_name: string;
   dispatched_at: Date;
   quantity: number;
+  value: string;
+}
+
+interface InventoryRow {
+  id: string;
+  code: string;
+  name: string;
   value: string;
 }
 
@@ -167,6 +176,53 @@ export function createReportsRepository(db: Pool | PoolClient): ReportsStore {
         quantity: row.quantity,
         value: row.value,
       }));
+    },
+
+    async inventoryByWarehouse(warehouseIds): Promise<WarehouseInventoryValue[]> {
+      // LEFT JOIN: una bodega sin existencias aparece con valor 0
+      const { rows } = await db.query<InventoryRow>(
+        `SELECT w.id, w.code, w.name,
+                COALESCE(SUM(s.quantity * s.avg_cost), 0)::numeric(20,4)::text AS value
+         FROM warehouses w
+         LEFT JOIN stock_levels s ON s.warehouse_id = w.id
+         WHERE w.active AND ($1::uuid[] IS NULL OR w.id = ANY($1::uuid[]))
+         GROUP BY w.id, w.code, w.name
+         ORDER BY lower(w.code)`,
+        [warehouseIds],
+      );
+      return rows.map((row) => ({
+        warehouseId: row.id,
+        code: row.code,
+        name: row.name,
+        value: row.value,
+      }));
+    },
+
+    async countTransfersByStatus(warehouseIds) {
+      const { rows } = await db.query<{ status: TransferStatus; count: number }>(
+        `SELECT status, count(*)::int AS count
+         FROM transfers
+         WHERE $1::uuid[] IS NULL
+            OR origin_warehouse_id = ANY($1::uuid[])
+            OR destination_warehouse_id = ANY($1::uuid[])
+         GROUP BY status`,
+        [warehouseIds],
+      );
+      return rows;
+    },
+
+    async shrinkageTotalsSince(warehouseIds, since) {
+      // Mismo valor que el reporte de mermas: cantidad × costo con que se registró cada una
+      const { rows } = await db.query<{ quantity: number; value: string }>(
+        `SELECT COALESCE(SUM(quantity), 0)::int AS quantity,
+                COALESCE(SUM(quantity * unit_cost), 0)::numeric(20,4)::text AS value
+         FROM stock_movements
+         WHERE type IN ('SHRINKAGE', 'TRANSIT_SHRINKAGE')
+           AND created_at >= $2
+           AND ($1::uuid[] IS NULL OR warehouse_id = ANY($1::uuid[]))`,
+        [warehouseIds, since],
+      );
+      return rows[0] ?? { quantity: 0, value: '0.0000' };
     },
   };
 }
