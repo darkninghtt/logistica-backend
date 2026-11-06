@@ -1,5 +1,6 @@
 import type { Role } from './user';
 import { totalValue, type MovementType, type StockMovement } from './stock';
+import type { TransferStatus } from './transfer';
 
 /**
  * Quién ve reportes, kardex y exportaciones: son datos de costo. ADMIN y AUDITOR, todas las
@@ -130,4 +131,45 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** Días completos transcurridos desde el despacho (0 el mismo día). */
 export function daysInTransit(dispatchedAt: string, now: Date): number {
   return Math.max(0, Math.floor((now.getTime() - new Date(dispatchedAt).getTime()) / DAY_MS));
+}
+
+/** Días hacia atrás que cubre el total de mermas del dashboard. */
+export const SUMMARY_SHRINKAGE_DAYS = 30;
+
+/** Valor del inventario de una bodega: suma de cantidad × costo promedio de sus existencias. */
+export interface WarehouseInventoryValue {
+  warehouseId: string;
+  code: string;
+  name: string;
+  value: string;
+}
+
+/** Resumen del dashboard (GET /api/reports/summary), ya filtrado por las bodegas de quien lo pide. */
+export interface DashboardSummary {
+  inventoryValueByWarehouse: WarehouseInventoryValue[];
+  transfersByStatus: Record<TransferStatus, number>;
+  shrinkageLast30Days: { quantity: number; value: string };
+  /** Valor de la mercancía en tránsito al costo congelado al despachar. */
+  inTransitValue: string;
+}
+
+/** Cuenta por estado con todos los estados presentes (0 los que no tienen traspasos). */
+export function countByStatus(
+  rows: readonly { status: TransferStatus; count: number }[],
+): Record<TransferStatus, number> {
+  const counts: Record<TransferStatus, number> = {
+    DRAFT: 0,
+    IN_TRANSIT: 0,
+    RECEIVED: 0,
+    DISCREPANCY: 0,
+    RESOLVED: 0,
+    CANCELLED: 0,
+  };
+  for (const row of rows) counts[row.status] = row.count;
+  return counts;
+}
+
+/** Inicio de la ventana de mermas del dashboard: `SUMMARY_SHRINKAGE_DAYS` días antes de `now`. */
+export function shrinkageWindowStart(now: Date): Date {
+  return new Date(now.getTime() - SUMMARY_SHRINKAGE_DAYS * DAY_MS);
 }

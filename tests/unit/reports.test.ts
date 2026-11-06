@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Actor } from '../../src/domain/authorization';
 import { ForbiddenError, NotFoundError } from '../../src/domain/errors';
 import { encodeCursor } from '../../src/domain/page';
-import { toKardexRow } from '../../src/domain/reports';
+import { countByStatus, toKardexRow } from '../../src/domain/reports';
 import type { MovementType, StockMovement } from '../../src/domain/stock';
 import { createReportsService, type ReportsStore } from '../../src/services/reports';
 import { createWarehouseAccess } from '../../src/services/warehouse-access';
@@ -77,6 +77,9 @@ describe('ReportsService.kardex', () => {
       listKardex: vi.fn(async () => rows),
       listShrinkage: vi.fn(async () => []),
       listInTransit: vi.fn(async () => []),
+      inventoryByWarehouse: vi.fn(async () => []),
+      countTransfersByStatus: vi.fn(async () => []),
+      shrinkageTotalsSince: vi.fn(async () => ({ quantity: 0, value: '0.0000' })),
       ...overrides,
     };
     return store;
@@ -142,5 +145,116 @@ describe('ReportsService.kardex', () => {
     await expect(
       createReportsService({ store: noProduct, access: allowAllAccess }).kardex(query, ADMIN),
     ).rejects.toThrow(new NotFoundError('El producto no existe'));
+  });
+});
+
+describe('countByStatus', () => {
+  it('incluye todos los estados, en 0 los que no tienen traspasos', () => {
+    expect(
+      countByStatus([
+        { status: 'IN_TRANSIT', count: 2 },
+        { status: 'RESOLVED', count: 1 },
+      ]),
+    ).toEqual({
+      DRAFT: 0,
+      IN_TRANSIT: 2,
+      RECEIVED: 0,
+      DISCREPANCY: 0,
+      RESOLVED: 1,
+      CANCELLED: 0,
+    });
+  });
+});
+
+describe('ReportsService.summary', () => {
+  const NOW = new Date('2026-11-05T12:00:00.000Z');
+  const MANAGER: Actor = { userId: 'u-jefe', role: 'WAREHOUSE_MANAGER' };
+  const OPERATOR: Actor = { userId: 'u-op', role: 'OPERATOR' };
+
+  function summaryStore(): ReportsStore {
+    return {
+      findWarehouse: vi.fn(async () => null),
+      findProduct: vi.fn(async () => null),
+      listKardex: vi.fn(async () => []),
+      listShrinkage: vi.fn(async () => []),
+      listInTransit: vi.fn(async () => [
+        {
+          transferId: 't-1',
+          originWarehouseId: 'wa',
+          originCode: 'A',
+          originName: 'Bodega A',
+          destinationWarehouseId: 'wb',
+          destinationCode: 'B',
+          destinationName: 'Bodega B',
+          dispatchedAt: '2026-11-04T12:00:00.000Z',
+          quantity: 3,
+          value: '0.1000',
+        },
+        {
+          transferId: 't-2',
+          originWarehouseId: 'wa',
+          originCode: 'A',
+          originName: 'Bodega A',
+          destinationWarehouseId: 'wb',
+          destinationCode: 'B',
+          destinationName: 'Bodega B',
+          dispatchedAt: '2026-11-04T12:00:00.000Z',
+          quantity: 1,
+          value: '0.2000',
+        },
+      ]),
+      inventoryByWarehouse: vi.fn(async () => [
+        { warehouseId: 'wa', code: 'A', name: 'Bodega A', value: '1100.0000' },
+      ]),
+      countTransfersByStatus: vi.fn(async () => [{ status: 'IN_TRANSIT' as const, count: 2 }]),
+      shrinkageTotalsSince: vi.fn(async () => ({ quantity: 3, value: '330.0000' })),
+    };
+  }
+
+  function scopedTo(ids: string[]) {
+    return {
+      ...allowAllAccess,
+      visibleIds: vi.fn(async () => ids),
+    };
+  }
+
+  it('arma el resumen con el alcance de quien lo pide y suma el tránsito sin flotantes', async () => {
+    const store = summaryStore();
+    const service = createReportsService({ store, access: scopedTo(['wa']), now: () => NOW });
+
+    const summary = await service.summary(MANAGER);
+
+    expect(store.inventoryByWarehouse).toHaveBeenCalledWith(['wa']);
+    expect(store.countTransfersByStatus).toHaveBeenCalledWith(['wa']);
+    expect(store.listInTransit).toHaveBeenCalledWith(['wa']);
+    // 30 días antes de "ahora"
+    expect(store.shrinkageTotalsSince).toHaveBeenCalledWith(
+      ['wa'],
+      new Date('2026-10-06T12:00:00.000Z'),
+    );
+    expect(summary).toEqual({
+      inventoryValueByWarehouse: [
+        { warehouseId: 'wa', code: 'A', name: 'Bodega A', value: '1100.0000' },
+      ],
+      transfersByStatus: {
+        DRAFT: 0,
+        IN_TRANSIT: 2,
+        RECEIVED: 0,
+        DISCREPANCY: 0,
+        RESOLVED: 0,
+        CANCELLED: 0,
+      },
+      shrinkageLast30Days: { quantity: 3, value: '330.0000' },
+      // 0.1 + 0.2 da 0.30000000000000004 con number; con decimal.js, exacto
+      inTransitValue: '0.3000',
+    });
+  });
+
+  it('el OPERATOR no ve el resumen (son datos de costo)', async () => {
+    const store = summaryStore();
+    await expect(
+      createReportsService({ store, access: allowAllAccess }).summary(OPERATOR),
+    ).rejects.toThrow(ForbiddenError);
+    expect(store.inventoryByWarehouse).not.toHaveBeenCalled();
   });
 });

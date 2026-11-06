@@ -456,6 +456,52 @@ export function buildOpenApiSpec(): object {
               },
             },
           },
+          DashboardSummary: {
+            type: 'object',
+            required: [
+              'inventoryValueByWarehouse',
+              'transfersByStatus',
+              'shrinkageLast30Days',
+              'inTransitValue',
+            ],
+            properties: {
+              inventoryValueByWarehouse: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  required: ['warehouseId', 'code', 'name', 'value'],
+                  properties: {
+                    warehouseId: { type: 'string', format: 'uuid' },
+                    code: { type: 'string' },
+                    name: { type: 'string' },
+                    value: { type: 'string', example: '1249.4112' },
+                  },
+                },
+              },
+              transfersByStatus: {
+                type: 'object',
+                description: 'Cantidad de traspasos por estado (todos los estados, 0 si no hay)',
+                additionalProperties: { type: 'integer' },
+                example: {
+                  DRAFT: 0,
+                  IN_TRANSIT: 1,
+                  RECEIVED: 1,
+                  DISCREPANCY: 0,
+                  RESOLVED: 1,
+                  CANCELLED: 0,
+                },
+              },
+              shrinkageLast30Days: {
+                type: 'object',
+                required: ['quantity', 'value'],
+                properties: {
+                  quantity: { type: 'integer' },
+                  value: { type: 'string', example: '492.3528' },
+                },
+              },
+              inTransitValue: { type: 'string', example: '208.2352' },
+            },
+          },
           InTransitReport: {
             type: 'object',
             required: ['data', 'totals'],
