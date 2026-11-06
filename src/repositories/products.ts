@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { ConflictError } from '../domain/errors';
 import type { Product } from '../domain/product';
+import type { DemoCatalogStore } from '../services/demo-data';
 import type { ProductStore } from '../services/products';
 
 interface ProductRow {
@@ -73,6 +74,40 @@ export function createProductsRepository(db: Pool | PoolClient): ProductStore {
       } catch (err) {
         throw isUniqueViolation(err) ? duplicateSku() : err;
       }
+    },
+  };
+}
+
+/** Solo para el seed de demo: crea los productos sin duplicarlos y detecta si la demo ya corrió. */
+export function createProductSeedRepository(
+  db: Pool | PoolClient,
+): Pick<DemoCatalogStore, 'ensureProduct' | 'hasMovements'> {
+  return {
+    async ensureProduct({ sku, name, unit }) {
+      await db.query(
+        'INSERT INTO products (sku, name, unit) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+        [sku, name, unit],
+      );
+      const { rows } = await db.query<{ id: string }>(
+        'SELECT id FROM products WHERE lower(sku) = lower($1)',
+        [sku],
+      );
+      const row = rows[0];
+      if (!row) {
+        throw new Error(`No se pudo crear el producto ${sku}`);
+      }
+      return row.id;
+    },
+
+    async hasMovements(skus) {
+      const { rows } = await db.query<{ found: boolean }>(
+        `SELECT EXISTS (
+           SELECT 1 FROM stock_movements m JOIN products p ON p.id = m.product_id
+           WHERE lower(p.sku) = ANY ($1::text[])
+         ) AS found`,
+        [skus.map((sku) => sku.toLowerCase())],
+      );
+      return rows[0]?.found === true;
     },
   };
 }
