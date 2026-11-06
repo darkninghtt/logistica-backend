@@ -15,6 +15,7 @@ import { createGeneralLimiter, createAuthLimiter, type RateLimits } from './midd
 import { createFrontendHandlers } from './middlewares/frontend';
 import { createAuthenticate } from './middlewares/authenticate';
 import { errorHandler, notFoundHandler } from './middlewares/error-handler';
+import { createSecurityHeaders } from './middlewares/security-headers';
 import { createAuthRouter } from './routes/auth';
 import { createHealthRouter } from './routes/health';
 import { createProductsRouter } from './routes/products';
@@ -82,6 +83,8 @@ export function createApp({
 
   app.disable('x-powered-by');
   if (trustProxy > 0) app.set('trust proxy', trustProxy);
+  // Cabeceras de seguridad (helmet + CSP) en todas las respuestas, también en los errores
+  app.use(createSecurityHeaders());
   app.use(createHttpLogger(logger));
   app.use(bindCorrelationId);
   app.use(express.json());
