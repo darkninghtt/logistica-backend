@@ -34,4 +34,6 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run typecheck
+      - name: Contrato OpenAPI al día
+        run: npm run openapi:check
       - run: npm test
