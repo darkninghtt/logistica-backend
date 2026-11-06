@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { UnauthorizedError } from '../domain/errors';
+import { NotFoundError, UnauthorizedError } from '../domain/errors';
 import type { UserRecord } from '../domain/user';
 
 export interface IssuedRefreshToken {
@@ -13,6 +13,26 @@ export interface NewRefreshToken {
   familyId: string;
   tokenHash: string;
   expiresAt: Date;
+  /** Navegador que abrió o renovó la sesión (encabezado User-Agent), si lo envió. */
+  userAgent: string | null;
+}
+
+/** Una familia con un token vigente, tal como la guarda la BD. */
+export interface ActiveFamily {
+  familyId: string;
+  userAgent: string | null;
+  createdAt: Date;
+  lastUsedAt: Date | null;
+}
+
+/** Sesión activa tal como la ve su dueño (GET /api/auth/sessions). */
+export interface SessionInfo {
+  id: string;
+  userAgent: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  /** Es la sesión desde la que se consulta (la de la cookie). */
+  current: boolean;
 }
 
 export interface StoredRefreshToken {
@@ -29,6 +49,12 @@ export interface RefreshTokenStore {
   consume(tokenHash: string): Promise<{ userId: string; familyId: string } | null>;
   find(tokenHash: string): Promise<StoredRefreshToken | null>;
   revokeFamily(familyId: string): Promise<void>;
+  /** Familias del usuario con un token vigente. */
+  listActive(userId: string): Promise<ActiveFamily[]>;
+  /** Revoca la familia solo si es de ese usuario y está activa. Devuelve false si no había tal. */
+  revokeFamilyOfUser(familyId: string, userId: string): Promise<boolean>;
+  /** Revoca todas las familias del usuario, salvo `exceptFamilyId` si se indica. */
+  revokeAllOfUser(userId: string, exceptFamilyId: string | null): Promise<void>;
 }
 
 export interface SessionUsers {
@@ -42,11 +68,20 @@ export interface RotatedSession {
 
 export interface SessionService {
   /** Abre una sesión nueva (una familia nueva de refresh tokens) para el usuario. */
-  start(userId: string): Promise<IssuedRefreshToken>;
+  start(userId: string, userAgent?: string | null): Promise<IssuedRefreshToken>;
   /** Canjea un refresh token por uno nuevo de la misma familia. Lanza UnauthorizedError si no sirve. */
-  rotate(token: string): Promise<RotatedSession>;
+  rotate(token: string, userAgent?: string | null): Promise<RotatedSession>;
   /** Cierra la sesión: revoca la familia del token. Un token desconocido se ignora. */
   end(token: string): Promise<void>;
+  /** Sesiones activas del usuario; marca como `current` la del token indicado (la cookie). */
+  list(userId: string, currentToken?: string): Promise<SessionInfo[]>;
+  /** Cierra una sesión propia. Una ajena, inexistente o ya cerrada da NotFoundError. */
+  revoke(userId: string, sessionId: string): Promise<void>;
+  /**
+   * Cierra todas las sesiones del usuario. Con `keepToken` conserva la de ese token (cambiar la
+   * propia contraseña no debe sacar a quien la cambia).
+   */
+  revokeAll(userId: string, options?: { keepToken?: string }): Promise<void>;
 }
 
 export interface SessionDeps {
@@ -68,6 +103,13 @@ export function hashRefreshToken(token: string): string {
 }
 
 const INVALID_SESSION = 'Sesión inválida o expirada';
+/** Tope del User-Agent guardado: es solo para reconocer la sesión en la lista. */
+export const MAX_USER_AGENT_LENGTH = 300;
+
+function cleanUserAgent(userAgent: string | null | undefined): string | null {
+  const value = userAgent?.trim();
+  return value ? value.slice(0, MAX_USER_AGENT_LENGTH) : null;
+}
 
 type RotateOutcome =
   | { kind: 'ok'; user: UserRecord; refresh: IssuedRefreshToken }
@@ -85,19 +127,33 @@ export function createSessionService({
     target: RefreshTokenStore,
     userId: string,
     familyId: string,
+    userAgent: string | null,
   ): Promise<IssuedRefreshToken> {
     const token = generateRefreshToken();
     const expiresAt = new Date(now().getTime() + ttlSeconds * 1000);
-    await target.insert({ userId, familyId, tokenHash: hashRefreshToken(token), expiresAt });
+    await target.insert({
+      userId,
+      familyId,
+      tokenHash: hashRefreshToken(token),
+      expiresAt,
+      userAgent,
+    });
     return { token, expiresAt };
   }
 
+  /** Familia del token si es de ese usuario; si no (o no hay token), null. */
+  async function familyOf(userId: string, token: string | undefined): Promise<string | null> {
+    if (!token) return null;
+    const known = await store.find(hashRefreshToken(token));
+    return known && known.userId === userId ? known.familyId : null;
+  }
+
   return {
-    start(userId) {
-      return issue(store, userId, randomUUID());
+    start(userId, userAgent) {
+      return issue(store, userId, randomUUID(), cleanUserAgent(userAgent));
     },
 
-    async rotate(token) {
+    async rotate(token, userAgent) {
       const tokenHash = hashRefreshToken(token);
 
       // Marcar el token como usado y emitir el nuevo va en una sola transacción: si algo falla,
@@ -107,7 +163,8 @@ export function createSessionService({
         if (!consumed) return { kind: 'missing' };
         const user = await users.findById(consumed.userId);
         if (!user?.active) return { kind: 'inactive', familyId: consumed.familyId };
-        return { kind: 'ok', user, refresh: await issue(tx, user.id, consumed.familyId) };
+        const refresh = await issue(tx, user.id, consumed.familyId, cleanUserAgent(userAgent));
+        return { kind: 'ok', user, refresh };
       });
 
       if (outcome.kind === 'ok') return { user: outcome.user, refresh: outcome.refresh };
@@ -129,6 +186,31 @@ export function createSessionService({
     async end(token) {
       const known = await store.find(hashRefreshToken(token));
       if (known) await store.revokeFamily(known.familyId);
+    },
+
+    async list(userId, currentToken) {
+      const [families, currentFamily] = await Promise.all([
+        store.listActive(userId),
+        familyOf(userId, currentToken),
+      ]);
+      return families.map((family) => ({
+        id: family.familyId,
+        userAgent: family.userAgent,
+        createdAt: family.createdAt.toISOString(),
+        lastUsedAt: family.lastUsedAt?.toISOString() ?? null,
+        current: family.familyId === currentFamily,
+      }));
+    },
+
+    async revoke(userId, sessionId) {
+      // Misma respuesta para una sesión ajena que para una inexistente: no se revela si existe
+      if (!(await store.revokeFamilyOfUser(sessionId, userId))) {
+        throw new NotFoundError('La sesión no existe');
+      }
+    },
+
+    async revokeAll(userId, { keepToken } = {}) {
+      await store.revokeAllOfUser(userId, await familyOf(userId, keepToken));
     },
   };
 }

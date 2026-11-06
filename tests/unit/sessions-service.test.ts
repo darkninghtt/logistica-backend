@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { UnauthorizedError } from '../../src/domain/errors';
+import { NotFoundError, UnauthorizedError } from '../../src/domain/errors';
 import type { UserRecord } from '../../src/domain/user';
 import {
   createSessionService,
   hashRefreshToken,
+  MAX_USER_AGENT_LENGTH,
   type NewRefreshToken,
   type RefreshTokenStore,
 } from '../../src/services/sessions';
@@ -20,13 +21,18 @@ const user: UserRecord = {
 interface Row extends NewRefreshToken {
   used: boolean;
   revoked: boolean;
+  createdAt: Date;
+}
+
+function isLive(row: Row): boolean {
+  return !row.used && !row.revoked && row.expiresAt > new Date();
 }
 
 /** Almacén en memoria con la misma semántica que el repositorio SQL. */
 function fakeStore(rows: Row[]): RefreshTokenStore {
   return {
     async insert(token) {
-      rows.push({ ...token, used: false, revoked: false });
+      rows.push({ ...token, used: false, revoked: false, createdAt: new Date() });
     },
     async consume(tokenHash) {
       const row = rows.find(
@@ -44,6 +50,27 @@ function fakeStore(rows: Row[]): RefreshTokenStore {
     },
     async revokeFamily(familyId) {
       for (const row of rows) if (row.familyId === familyId) row.revoked = true;
+    },
+    async listActive(userId) {
+      return rows
+        .filter((r) => r.userId === userId && isLive(r))
+        .map((r) => ({
+          familyId: r.familyId,
+          userAgent: r.userAgent,
+          createdAt: rows.find((f) => f.familyId === r.familyId)?.createdAt ?? r.createdAt,
+          lastUsedAt: r.createdAt,
+        }));
+    },
+    async revokeFamilyOfUser(familyId, userId) {
+      const family = rows.filter((r) => r.familyId === familyId && r.userId === userId);
+      if (!family.some(isLive)) return false;
+      for (const row of family) row.revoked = true;
+      return true;
+    },
+    async revokeAllOfUser(userId, exceptFamilyId) {
+      for (const row of rows) {
+        if (row.userId === userId && row.familyId !== exceptFamilyId) row.revoked = true;
+      }
     },
   };
 }
@@ -125,5 +152,72 @@ describe('SessionService', () => {
     expect(rows[0]?.revoked).toBe(true);
     await expect(service.rotate(token)).rejects.toBeInstanceOf(UnauthorizedError);
     await expect(service.end('desconocido')).resolves.toBeUndefined();
+  });
+});
+
+describe('SessionService: sesiones activas', () => {
+  it('guarda el navegador al iniciar y lo actualiza al renovar, recortado a 300 caracteres', async () => {
+    const { rows, service } = setup();
+    const first = await service.start('u-1', '  Firefox/131  ');
+    await service.rotate(first.token, 'Chrome/' + 'x'.repeat(400));
+
+    expect(rows[0]?.userAgent).toBe('Firefox/131');
+    expect(rows[1]?.userAgent).toHaveLength(MAX_USER_AGENT_LENGTH);
+  });
+
+  it('list da una sesión por familia vigente y marca la del token actual', async () => {
+    const { service } = setup();
+    const a = await service.start('u-1', 'A');
+    const b = await service.start('u-1', 'B');
+    const rotatedB = await service.rotate(b.token);
+    await service.end(a.token);
+    const c = await service.start('u-1', 'C');
+
+    const sessions = await service.list('u-1', rotatedB.refresh.token);
+
+    expect(sessions.map((s) => s.userAgent ?? '(sin navegador)').sort()).toEqual([
+      '(sin navegador)',
+      'C',
+    ]);
+    expect(sessions.filter((s) => s.current)).toHaveLength(1);
+    expect(sessions.find((s) => s.current)?.userAgent).toBeNull();
+    // Sin token, ninguna es la actual; con el token de otra persona, no se ve nada ajeno
+    expect((await service.list('u-1')).some((s) => s.current)).toBe(false);
+    expect(await service.list('otra', c.token)).toEqual([]);
+  });
+
+  it('revoke cierra una sesión propia; su refresh deja de servir', async () => {
+    const { service } = setup();
+    const mine = await service.start('u-1');
+    const [session] = await service.list('u-1');
+
+    await service.revoke('u-1', session?.id ?? '');
+
+    await expect(service.rotate(mine.token)).rejects.toThrow(UnauthorizedError);
+  });
+
+  it('revoke de una sesión ajena, inexistente o ya cerrada da NotFoundError', async () => {
+    const { service } = setup();
+    await service.start('u-1');
+    const [session] = await service.list('u-1');
+    const id = session?.id ?? '';
+
+    await expect(service.revoke('u-2', id)).rejects.toThrow(NotFoundError);
+    await expect(service.revoke('u-1', 'no-existe')).rejects.toThrow(NotFoundError);
+    await service.revoke('u-1', id);
+    await expect(service.revoke('u-1', id)).rejects.toThrow(NotFoundError);
+  });
+
+  it('revokeAll cierra todas, salvo la del token que se pide conservar', async () => {
+    const { service } = setup();
+    const keep = await service.start('u-1');
+    const other = await service.start('u-1');
+
+    await service.revokeAll('u-1', { keepToken: keep.token });
+    await expect(service.rotate(other.token)).rejects.toThrow(UnauthorizedError);
+    const renewed = await service.rotate(keep.token);
+
+    await service.revokeAll('u-1');
+    await expect(service.rotate(renewed.refresh.token)).rejects.toThrow(UnauthorizedError);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { UnauthorizedError } from '../../src/domain/errors';
+import { UnauthorizedError, ValidationError } from '../../src/domain/errors';
 import type { UserRecord } from '../../src/domain/user';
 import {
   createAuthService,
@@ -22,6 +22,7 @@ function setup(user: UserRecord | null = admin) {
   const users: UserLookup = {
     findByEmail: vi.fn(async () => user),
     findById: vi.fn(async () => user),
+    updatePasswordHash: vi.fn(async () => undefined),
   };
   const hasher: PasswordHasher = {
     hash: vi.fn(async () => 'hash-de-relleno'),
@@ -38,6 +39,9 @@ function setup(user: UserRecord | null = admin) {
       refresh: { token: 'refresh-rotado', expiresAt: new Date(0) },
     })),
     end: vi.fn(async () => undefined),
+    list: vi.fn(async () => []),
+    revoke: vi.fn(async () => undefined),
+    revokeAll: vi.fn(async () => undefined),
   };
   return {
     users,
@@ -117,7 +121,7 @@ describe('AuthService: sesión', () => {
   it('login abre una sesión nueva y devuelve su refresh token', async () => {
     const { service, sessions } = setup();
     const result = await service.login('admin@example.com', 'buena');
-    expect(sessions.start).toHaveBeenCalledWith('u-1');
+    expect(sessions.start).toHaveBeenCalledWith('u-1', undefined);
     expect(result.refresh.token).toBe('refresh-nuevo');
   });
 
@@ -135,7 +139,7 @@ describe('AuthService: sesión', () => {
   it('refresh devuelve un access token nuevo y el refresh rotado', async () => {
     const { service, sessions } = setup();
     const result = await service.refresh('viejo');
-    expect(sessions.rotate).toHaveBeenCalledWith('viejo');
+    expect(sessions.rotate).toHaveBeenCalledWith('viejo', undefined);
     expect(result.accessToken).toBe('token-firmado');
     expect(result.refresh.token).toBe('refresh-rotado');
   });
@@ -144,5 +148,57 @@ describe('AuthService: sesión', () => {
     const { service, sessions } = setup();
     await service.logout('viejo');
     expect(sessions.end).toHaveBeenCalledWith('viejo');
+  });
+});
+
+describe('AuthService.changePassword', () => {
+  it('con la actual correcta guarda el hash nuevo y cierra las demás sesiones (no la actual)', async () => {
+    const { service, users, sessions, hasher } = setup();
+    await service.changePassword(
+      'u-1',
+      { currentPassword: 'buena', newPassword: 'Nueva-clave-2026' },
+      'refresh-de-esta-sesion',
+    );
+
+    expect(hasher.hash).toHaveBeenCalledWith('Nueva-clave-2026');
+    expect(users.updatePasswordHash).toHaveBeenCalledWith('u-1', 'hash-de-relleno');
+    expect(sessions.revokeAll).toHaveBeenCalledWith('u-1', {
+      keepToken: 'refresh-de-esta-sesion',
+    });
+  });
+
+  it('con la actual incorrecta da ValidationError (400) y no cambia nada', async () => {
+    const { service, users, sessions } = setup();
+    await expect(
+      service.changePassword('u-1', { currentPassword: 'mala', newPassword: 'Nueva-clave-2026' }),
+    ).rejects.toThrow(ValidationError);
+    expect(users.updatePasswordHash).not.toHaveBeenCalled();
+    expect(sessions.revokeAll).not.toHaveBeenCalled();
+  });
+
+  it('un usuario desactivado o inexistente no puede cambiarla', async () => {
+    const input = { currentPassword: 'buena', newPassword: 'Nueva-clave-2026' };
+    await expect(
+      setup({ ...admin, active: false }).service.changePassword('u-1', input),
+    ).rejects.toThrow(UnauthorizedError);
+    await expect(setup(null).service.changePassword('u-1', input)).rejects.toThrow(
+      UnauthorizedError,
+    );
+  });
+});
+
+describe('AuthService: sesiones', () => {
+  it('login y refresh pasan el navegador a la sesión', async () => {
+    const { service, sessions } = setup();
+    await service.login('admin@example.com', 'buena', 'Firefox/131');
+    await service.refresh('refresh-viejo', 'Firefox/131');
+    expect(sessions.start).toHaveBeenCalledWith('u-1', 'Firefox/131');
+    expect(sessions.rotate).toHaveBeenCalledWith('refresh-viejo', 'Firefox/131');
+  });
+
+  it('logoutAll cierra todas, sin conservar ninguna', async () => {
+    const { service, sessions } = setup();
+    await service.logoutAll('u-1');
+    expect(sessions.revokeAll).toHaveBeenCalledWith('u-1');
   });
 });

@@ -4,7 +4,7 @@ import { roleSchema } from '../domain/user';
 const email = z.string().trim().toLowerCase().pipe(z.email('no es un correo válido'));
 const name = z.string().trim().min(1, 'es obligatorio').max(100, 'es demasiado largo');
 // Mismo mínimo que exige el seed del ADMIN
-const password = z
+export const passwordSchema = z
   .string()
   .min(12, 'debe tener al menos 12 caracteres')
   .max(128, 'es demasiado larga');
@@ -14,7 +14,7 @@ export const createUserBodySchema = z.object({
   email,
   name,
   role: roleSchema,
-  password,
+  password: passwordSchema,
   active: z.boolean().default(true),
 });
 
@@ -23,7 +23,7 @@ export const updateUserBodySchema = z.object({
   email,
   name,
   role: roleSchema,
-  password: password.optional(),
+  password: passwordSchema.optional(),
   active: z.boolean(),
 });
 

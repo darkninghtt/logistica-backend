@@ -5,6 +5,7 @@ import type { ManagedUser, Role } from '../domain/user';
 import type { PageQuery } from '../schemas/page';
 import type { CreateUserInput, UpdateUserInput } from '../schemas/users';
 import type { PasswordHasher } from './auth';
+import type { SessionService } from './sessions';
 
 /** Lo que el servicio necesita de la persistencia (la implementa el repositorio de usuarios). */
 export interface UserManagementStore {
@@ -40,9 +41,12 @@ export interface UserManagementService {
 export function createUserManagementService({
   users,
   hasher,
+  sessions,
 }: {
   users: UserManagementStore;
   hasher: PasswordHasher;
+  /** Para cerrar las sesiones del usuario al cambiarle la contraseña o desactivarlo. */
+  sessions: Pick<SessionService, 'revokeAll'>;
 }): UserManagementService {
   return {
     async list({ page, pageSize }, actor) {
@@ -62,6 +66,11 @@ export function createUserManagementService({
       const updated = await users.update(id, { ...rest, ...(passwordHash && { passwordHash }) });
       if (!updated) {
         throw new NotFoundError('El usuario no existe');
+      }
+      // Con la contraseña cambiada o el usuario desactivado, ninguna sesión abierta debe seguir
+      // renovándose (su access token vigente vence solo en minutos)
+      if (passwordHash !== undefined || !updated.active) {
+        await sessions.revokeAll(id);
       }
       return updated;
     },

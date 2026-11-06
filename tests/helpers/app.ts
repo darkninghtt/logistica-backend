@@ -93,7 +93,7 @@ export function buildTestApp(pool: Pool, expiresInSeconds = 900): TestApp {
     access,
     events,
   });
-  const userManagementService = createUserManagementService({ users, hasher });
+  const userManagementService = createUserManagementService({ users, hasher, sessions });
   const deps: AppDeps = {
     logger,
     authService,
