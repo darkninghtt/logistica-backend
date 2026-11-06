@@ -1,0 +1,4340 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "API de logística y trazabilidad de stock",
+    "version": "0.1.0",
+    "description": "Proyecto 21: traspasos inter-bodegas, mermas y costo promedio ponderado."
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "minLength": 1,
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "PasswordChangeInput": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "newPassword": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ]
+      },
+      "UserCreateInput": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "WAREHOUSE_MANAGER",
+              "OPERATOR",
+              "AUDITOR"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128
+          },
+          "active": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "role",
+          "password"
+        ]
+      },
+      "UserUpdateInput": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "WAREHOUSE_MANAGER",
+              "OPERATOR",
+              "AUDITOR"
+            ]
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 128
+          },
+          "active": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "role",
+          "active"
+        ]
+      },
+      "UserWarehousesInput": {
+        "type": "object",
+        "properties": {
+          "warehouseIds": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "warehouseIds"
+        ]
+      },
+      "WarehouseInput": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "active": {
+            "default": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ]
+      },
+      "ProductInput": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 20
+          }
+        },
+        "required": [
+          "sku",
+          "name",
+          "unit"
+        ]
+      },
+      "StockEntryInput": {
+        "type": "object",
+        "properties": {
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          },
+          "unitCost": {
+            "type": "string",
+            "pattern": "^\\d{1,10}(\\.\\d{1,4})?$"
+          }
+        },
+        "required": [
+          "warehouseId",
+          "productId",
+          "quantity",
+          "unitCost"
+        ]
+      },
+      "StockShrinkageInput": {
+        "type": "object",
+        "properties": {
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000000
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "DAMAGE",
+              "EXPIRED",
+              "THEFT",
+              "COUNT_ADJUSTMENT"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "warehouseId",
+          "productId",
+          "quantity",
+          "reason"
+        ]
+      },
+      "TransferCreateInput": {
+        "type": "object",
+        "properties": {
+          "originWarehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "destinationWarehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "items": {
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "quantity": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000000000
+                }
+              },
+              "required": [
+                "productId",
+                "quantity"
+              ]
+            }
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "originWarehouseId",
+          "destinationWarehouseId",
+          "items"
+        ]
+      },
+      "TransferReceiveInput": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "receivedQuantity": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000
+                }
+              },
+              "required": [
+                "productId",
+                "receivedQuantity"
+              ]
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "TransferResolveInput": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "TransferCancelInput": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "WAREHOUSE_MANAGER",
+              "OPERATOR",
+              "AUDITOR"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "JWT de corta duración"
+          },
+          "user": {
+            "$ref": "#/components/schemas/User"
+          }
+        },
+        "required": [
+          "accessToken",
+          "user"
+        ],
+        "additionalProperties": false
+      },
+      "Session": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Familia de refresh tokens"
+          },
+          "userAgent": {
+            "nullable": true,
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastUsedAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "current": {
+            "type": "boolean",
+            "description": "Es la sesión de esta cookie"
+          }
+        },
+        "required": [
+          "id",
+          "userAgent",
+          "createdAt",
+          "lastUsedAt",
+          "current"
+        ],
+        "additionalProperties": false
+      },
+      "ManagedUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "WAREHOUSE_MANAGER",
+              "OPERATOR",
+              "AUDITOR"
+            ]
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "warehouseIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "role",
+          "active",
+          "warehouseIds",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "ManagedUserPage": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManagedUser"
+            }
+          },
+          "page": {
+            "type": "integer"
+          },
+          "pageSize": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "additionalProperties": false
+      },
+      "UserWarehouses": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "warehouseIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "userId",
+          "warehouseIds"
+        ],
+        "additionalProperties": false
+      },
+      "Warehouse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string",
+            "example": "BOD-A"
+          },
+          "name": {
+            "type": "string",
+            "example": "Bodega A"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "active",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "WarehousePage": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Warehouse"
+            }
+          },
+          "page": {
+            "type": "integer"
+          },
+          "pageSize": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "additionalProperties": false
+      },
+      "WarehouseRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "code": {
+            "type": "string",
+            "example": "BOD-A"
+          },
+          "name": {
+            "type": "string",
+            "example": "Bodega A"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "WarehouseDestinationList": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WarehouseRef"
+            }
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "additionalProperties": false
+      },
+      "Product": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sku": {
+            "type": "string",
+            "example": "SKU-001"
+          },
+          "name": {
+            "type": "string",
+            "example": "Tornillo 1/4"
+          },
+          "unit": {
+            "type": "string",
+            "example": "un"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "sku",
+          "name",
+          "unit",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "ProductPage": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Product"
+            }
+          },
+          "page": {
+            "type": "integer"
+          },
+          "pageSize": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "additionalProperties": false
+      },
+      "StockLevel": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "integer",
+            "example": 20
+          },
+          "avgCost": {
+            "description": "Costo promedio ponderado. No se envía al OPERATOR",
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "example": "110.0000"
+          },
+          "totalValue": {
+            "description": "quantity × avgCost. No se envía al OPERATOR",
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "example": "110.0000"
+          }
+        },
+        "required": [
+          "productId",
+          "warehouseId",
+          "quantity"
+        ],
+        "additionalProperties": false
+      },
+      "StockMovement": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "1"
+          },
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ENTRY",
+              "TRANSFER_OUT",
+              "TRANSFER_IN",
+              "SHRINKAGE",
+              "TRANSIT_SHRINKAGE",
+              "ADJUSTMENT_IN"
+            ]
+          },
+          "quantity": {
+            "type": "integer",
+            "example": 10
+          },
+          "unitCost": {
+            "description": "No se envía al OPERATOR",
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "example": "110.0000"
+          },
+          "balanceQty": {
+            "type": "integer",
+            "description": "Saldo después del movimiento"
+          },
+          "balanceAvgCost": {
+            "description": "Costo promedio después del movimiento. No se envía al OPERATOR",
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "example": "110.0000"
+          },
+          "reason": {
+            "nullable": true,
+            "description": "Motivo (mermas, ajustes y resoluciones)",
+            "type": "string"
+          },
+          "transferId": {
+            "nullable": true,
+            "description": "Traspaso que originó el movimiento",
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "warehouseId",
+          "type",
+          "quantity",
+          "balanceQty",
+          "reason",
+          "transferId",
+          "createdBy",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "StockEntryResponse": {
+        "type": "object",
+        "properties": {
+          "movement": {
+            "$ref": "#/components/schemas/StockMovement"
+          },
+          "stockLevel": {
+            "$ref": "#/components/schemas/StockLevel"
+          }
+        },
+        "required": [
+          "movement",
+          "stockLevel"
+        ],
+        "additionalProperties": false
+      },
+      "StockLevelItem": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "integer",
+            "example": 20
+          },
+          "avgCost": {
+            "description": "Costo promedio ponderado. No se envía al OPERATOR",
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "example": "110.0000"
+          },
+          "totalValue": {
+            "description": "quantity × avgCost. No se envía al OPERATOR",
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "example": "110.0000"
+          },
+          "productSku": {
+            "type": "string",
+            "example": "SKU-001"
+          },
+          "productName": {
+            "type": "string",
+            "example": "Tornillo 1/4"
+          },
+          "productUnit": {
+            "type": "string",
+            "example": "un"
+          }
+        },
+        "required": [
+          "productId",
+          "warehouseId",
+          "quantity",
+          "productSku",
+          "productName",
+          "productUnit"
+        ],
+        "additionalProperties": false
+      },
+      "StockLevelPage": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StockLevelItem"
+            }
+          },
+          "page": {
+            "type": "integer"
+          },
+          "pageSize": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "additionalProperties": false
+      },
+      "StockMovementItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "1"
+          },
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "warehouseId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ENTRY",
+              "TRANSFER_OUT",
+              "TRANSFER_IN",
+              "SHRINKAGE",
+              "TRANSIT_SHRINKAGE",
+              "ADJUSTMENT_IN"
+            ]
+          },
+          "quantity": {
+            "type": "integer",
+            "example": 10
+          },
+          "unitCost": {
+            "description": "No se envía al OPERATOR",
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "example": "110.0000"
+          },
+          "balanceQty": {
+            "type": "integer",
+            "description": "Saldo después del movimiento"
+          },
+          "balanceAvgCost": {
+            "description": "Costo promedio después del movimiento. No se envía al OPERATOR",
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "example": "110.0000"
+          },
+          "reason": {
+            "nullable": true,
+            "description": "Motivo (mermas, ajustes y resoluciones)",
+            "type": "string"
+          },
+          "transferId": {
+            "nullable": true,
+            "description": "Traspaso que originó el movimiento",
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "productSku": {
+            "type": "string",
+            "example": "SKU-001"
+          },
+          "productName": {
+            "type": "string",
+            "example": "Tornillo 1/4"
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "warehouseId",
+          "type",
+          "quantity",
+          "balanceQty",
+          "reason",
+          "transferId",
+          "createdBy",
+          "createdAt",
+          "productSku",
+          "productName"
+        ],
+        "additionalProperties": false
+      },
+      "StockMovementPage": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StockMovementItem"
+            }
+          },
+          "nextCursor": {
+            "nullable": true,
+            "description": "Se envía como `cursor` para pedir la página siguiente; null al final",
+            "type": "string"
+          }
+        },
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "additionalProperties": false
+      },
+      "KardexRow": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id del movimiento en el libro"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ENTRY",
+              "TRANSFER_OUT",
+              "TRANSFER_IN",
+              "SHRINKAGE",
+              "TRANSIT_SHRINKAGE",
+              "ADJUSTMENT_IN"
+            ]
+          },
+          "reference": {
+            "nullable": true,
+            "description": "Motivo del movimiento o, si no tiene, el id del traspaso",
+            "type": "string"
+          },
+          "transferId": {
+            "nullable": true,
+            "type": "string",
+            "format": "uuid"
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "Cantidad del movimiento en el libro"
+          },
+          "quantityIn": {
+            "type": "integer"
+          },
+          "quantityOut": {
+            "type": "integer"
+          },
+          "balanceQty": {
+            "type": "integer"
+          },
+          "unitCost": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "description": "Número decimal como texto",
+            "example": "110.0000"
+          },
+          "balanceAvgCost": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "description": "Número decimal como texto",
+            "example": "110.0000"
+          },
+          "balanceValue": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "description": "Número decimal como texto",
+            "example": "110.0000"
+          }
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "type",
+          "reference",
+          "transferId",
+          "quantity",
+          "quantityIn",
+          "quantityOut",
+          "balanceQty",
+          "unitCost",
+          "balanceAvgCost",
+          "balanceValue"
+        ],
+        "additionalProperties": false
+      },
+      "KardexPage": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KardexRow"
+            }
+          },
+          "nextCursor": {
+            "nullable": true,
+            "description": "Se envía como `cursor` para pedir la página siguiente; null al final",
+            "type": "string"
+          },
+          "warehouse": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "code": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "code",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "product": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "sku": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "unit": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "sku",
+              "name",
+              "unit"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data",
+          "nextCursor",
+          "warehouse",
+          "product"
+        ],
+        "additionalProperties": false
+      },
+      "ShrinkageReport": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "warehouseId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "warehouseCode": {
+                  "type": "string"
+                },
+                "warehouseName": {
+                  "type": "string"
+                },
+                "productId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "productSku": {
+                  "type": "string"
+                },
+                "productName": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "SHRINKAGE",
+                    "TRANSIT_SHRINKAGE"
+                  ]
+                },
+                "reason": {
+                  "nullable": true,
+                  "description": "Código del motivo (null en la merma en tránsito)",
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "integer"
+                },
+                "value": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$",
+                  "description": "Número decimal como texto",
+                  "example": "110.0000"
+                }
+              },
+              "required": [
+                "warehouseId",
+                "warehouseCode",
+                "warehouseName",
+                "productId",
+                "productSku",
+                "productName",
+                "type",
+                "reason",
+                "quantity",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "totals": {
+            "type": "object",
+            "properties": {
+              "quantity": {
+                "type": "integer"
+              },
+              "value": {
+                "type": "string",
+                "pattern": "^-?\\d+(\\.\\d+)?$",
+                "description": "Número decimal como texto",
+                "example": "110.0000"
+              }
+            },
+            "required": [
+              "quantity",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data",
+          "totals"
+        ],
+        "additionalProperties": false
+      },
+      "InTransitReport": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "transferId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "originWarehouseId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "originCode": {
+                  "type": "string"
+                },
+                "originName": {
+                  "type": "string"
+                },
+                "destinationWarehouseId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "destinationCode": {
+                  "type": "string"
+                },
+                "destinationName": {
+                  "type": "string"
+                },
+                "dispatchedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "daysInTransit": {
+                  "type": "integer"
+                },
+                "quantity": {
+                  "type": "integer"
+                },
+                "value": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$",
+                  "description": "Número decimal como texto",
+                  "example": "110.0000"
+                }
+              },
+              "required": [
+                "transferId",
+                "originWarehouseId",
+                "originCode",
+                "originName",
+                "destinationWarehouseId",
+                "destinationCode",
+                "destinationName",
+                "dispatchedAt",
+                "daysInTransit",
+                "quantity",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "totals": {
+            "type": "object",
+            "properties": {
+              "transfers": {
+                "type": "integer"
+              },
+              "quantity": {
+                "type": "integer"
+              },
+              "value": {
+                "type": "string",
+                "pattern": "^-?\\d+(\\.\\d+)?$",
+                "description": "Número decimal como texto",
+                "example": "110.0000"
+              }
+            },
+            "required": [
+              "transfers",
+              "quantity",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "data",
+          "totals"
+        ],
+        "additionalProperties": false
+      },
+      "DashboardSummary": {
+        "type": "object",
+        "properties": {
+          "inventoryValueByWarehouse": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "warehouseId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string",
+                  "pattern": "^-?\\d+(\\.\\d+)?$",
+                  "description": "Número decimal como texto",
+                  "example": "110.0000"
+                }
+              },
+              "required": [
+                "warehouseId",
+                "code",
+                "name",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "transfersByStatus": {
+            "type": "object",
+            "properties": {
+              "DRAFT": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "IN_TRANSIT": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "RECEIVED": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "DISCREPANCY": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "RESOLVED": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "CANCELLED": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "DRAFT",
+              "IN_TRANSIT",
+              "RECEIVED",
+              "DISCREPANCY",
+              "RESOLVED",
+              "CANCELLED"
+            ],
+            "additionalProperties": false
+          },
+          "shrinkageLast30Days": {
+            "type": "object",
+            "properties": {
+              "quantity": {
+                "type": "integer"
+              },
+              "value": {
+                "type": "string",
+                "pattern": "^-?\\d+(\\.\\d+)?$",
+                "description": "Número decimal como texto",
+                "example": "110.0000"
+              }
+            },
+            "required": [
+              "quantity",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          "inTransitValue": {
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "description": "Número decimal como texto",
+            "example": "110.0000"
+          }
+        },
+        "required": [
+          "inventoryValueByWarehouse",
+          "transfersByStatus",
+          "shrinkageLast30Days",
+          "inTransitValue"
+        ],
+        "additionalProperties": false
+      },
+      "TransferSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "IN_TRANSIT",
+              "RECEIVED",
+              "DISCREPANCY",
+              "RESOLVED",
+              "CANCELLED"
+            ]
+          },
+          "origin": {
+            "$ref": "#/components/schemas/WarehouseRef"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/WarehouseRef"
+          },
+          "itemCount": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "origin",
+          "destination",
+          "itemCount",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "TransferPage": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransferSummary"
+            }
+          },
+          "page": {
+            "type": "integer"
+          },
+          "pageSize": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "data",
+          "page",
+          "pageSize",
+          "total"
+        ],
+        "additionalProperties": false
+      },
+      "TransferItem": {
+        "type": "object",
+        "properties": {
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productSku": {
+            "type": "string",
+            "example": "SKU-001"
+          },
+          "productName": {
+            "type": "string",
+            "example": "Tornillo 1/4"
+          },
+          "quantitySent": {
+            "type": "integer"
+          },
+          "quantityReceived": {
+            "nullable": true,
+            "description": "null hasta que se recibe",
+            "type": "integer"
+          },
+          "unitCost": {
+            "description": "Costo congelado al despachar (null en borrador). No se envía al OPERATOR.",
+            "nullable": true,
+            "type": "string",
+            "pattern": "^-?\\d+(\\.\\d+)?$",
+            "example": "110.0000"
+          }
+        },
+        "required": [
+          "productId",
+          "productSku",
+          "productName",
+          "quantitySent",
+          "quantityReceived"
+        ],
+        "additionalProperties": false
+      },
+      "TransferEvent": {
+        "type": "object",
+        "properties": {
+          "fromStatus": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "IN_TRANSIT",
+              "RECEIVED",
+              "DISCREPANCY",
+              "RESOLVED",
+              "CANCELLED"
+            ]
+          },
+          "toStatus": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "IN_TRANSIT",
+              "RECEIVED",
+              "DISCREPANCY",
+              "RESOLVED",
+              "CANCELLED"
+            ]
+          },
+          "actor": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "reason": {
+            "nullable": true,
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "fromStatus",
+          "toStatus",
+          "actor",
+          "reason",
+          "createdAt"
+        ],
+        "additionalProperties": false
+      },
+      "TransferDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "IN_TRANSIT",
+              "RECEIVED",
+              "DISCREPANCY",
+              "RESOLVED",
+              "CANCELLED"
+            ]
+          },
+          "origin": {
+            "$ref": "#/components/schemas/WarehouseRef"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/WarehouseRef"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "note": {
+            "nullable": true,
+            "type": "string"
+          },
+          "createdBy": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "dispatchedBy": {
+            "nullable": true,
+            "type": "string",
+            "format": "uuid"
+          },
+          "dispatchedAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "receivedBy": {
+            "nullable": true,
+            "type": "string",
+            "format": "uuid"
+          },
+          "receivedAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolvedBy": {
+            "nullable": true,
+            "type": "string",
+            "format": "uuid"
+          },
+          "resolvedAt": {
+            "nullable": true,
+            "type": "string",
+            "format": "date-time"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransferItem"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransferEvent"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "origin",
+          "destination",
+          "createdAt",
+          "updatedAt",
+          "note",
+          "createdBy",
+          "dispatchedBy",
+          "dispatchedAt",
+          "receivedBy",
+          "receivedAt",
+          "resolvedBy",
+          "resolvedAt",
+          "items",
+          "events"
+        ],
+        "additionalProperties": false
+      },
+      "RealtimeTicket": {
+        "type": "object",
+        "properties": {
+          "ticket": {
+            "type": "string",
+            "description": "Aleatorio, de un solo uso"
+          },
+          "expiresIn": {
+            "type": "integer",
+            "description": "Segundos de validez",
+            "example": 30
+          }
+        },
+        "required": [
+          "ticket",
+          "expiresIn"
+        ],
+        "additionalProperties": false
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "VALIDATION_ERROR",
+              "UNAUTHORIZED",
+              "FORBIDDEN",
+              "NOT_FOUND",
+              "CONFLICT",
+              "INVALID_TRANSITION",
+              "INSUFFICIENT_STOCK",
+              "TOO_MANY_REQUESTS",
+              "INTERNAL_ERROR"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "correlationId"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Inicia sesión",
+        "description": "Devuelve un access token (JWT corto) y los datos del usuario, y fija el refresh token en la cookie `refresh_token` (HttpOnly, SameSite=Strict, Path=/api/auth). Con límite de intentos fallidos por IP. Es de los pocos endpoints de /api que no exigen token.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Sesión iniciada",
+            "headers": {
+              "Set-Cookie": {
+                "description": "Cookie `refresh_token` (HttpOnly; SameSite=Strict; Secure en producción; Path=/api/auth)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Correo o contraseña incorrectos, o usuario desactivado (no se indica cuál)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiados intentos fallidos desde esta IP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Cierra la sesión",
+        "description": "Revoca la sesión del refresh token de la cookie y borra la cookie. Si no hay cookie igual responde 204.",
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "Sesión cerrada"
+          }
+        }
+      }
+    },
+    "/api/auth/logout-all": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Cierra todas las sesiones propias (incluida esta)",
+        "description": "Revoca todas las familias del usuario y borra la cookie. Los access tokens ya emitidos siguen valiendo hasta que vencen (son cortos).",
+        "responses": {
+          "204": {
+            "description": "Sesiones cerradas"
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Datos del usuario autenticado",
+        "responses": {
+          "200": {
+            "description": "Usuario del token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/password": {
+      "put": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Cambia la propia contraseña",
+        "description": "Exige la contraseña actual. Al cambiarla se cierran las demás sesiones del usuario; la de la cookie de esta petición sigue abierta. Cuenta para el límite de intentos fallidos del login.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChangeInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Contraseña cambiada"
+          },
+          "400": {
+            "description": "Contraseña actual incorrecta o nueva contraseña inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiados intentos fallidos desde esta IP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Renueva la sesión",
+        "description": "Usa la cookie `refresh_token` (no lleva cuerpo). Devuelve un access token nuevo y rota la cookie. Reutilizar un refresh token ya rotado revoca toda la sesión (familia) y responde 401.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Sesión renovada",
+            "headers": {
+              "Set-Cookie": {
+                "description": "Cookie `refresh_token` nueva (rotada)",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sin cookie, token inexistente, vencido, reutilizado o usuario desactivado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Demasiados intentos fallidos desde esta IP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/sessions": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Sesiones activas propias",
+        "description": "Cada sesión es una familia de refresh tokens con un token vigente (un navegador donde se inició sesión). Marca con `current` la de la cookie `refresh_token` de esta petición. Solo devuelve las del usuario del token.",
+        "responses": {
+          "200": {
+            "description": "Sesiones activas, la usada más recientemente primero",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Session"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/sessions/{id}": {
+      "delete": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Cierra una sesión propia",
+        "description": "Revoca la familia; su próximo refresh dará 401. Una sesión ajena, inexistente o ya cerrada da 404 (no se revela si existe).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Sesión cerrada"
+          },
+          "400": {
+            "description": "Identificador inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La sesión no existe o no es tuya",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/products": {
+      "get": {
+        "tags": [
+          "Productos"
+        ],
+        "summary": "Lista los productos (paginada, ordenados por SKU)",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de productos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProductPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros de paginación inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Productos"
+        ],
+        "summary": "Crea un producto (solo ADMIN)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Producto creado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Solo el ADMIN crea productos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya existe un producto con ese SKU",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/products/{id}": {
+      "put": {
+        "tags": [
+          "Productos"
+        ],
+        "summary": "Edita un producto (solo ADMIN; reemplaza SKU, nombre y unidad)",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProductInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Producto actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Product"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos o identificador inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Solo el ADMIN edita productos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El producto no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya existe otro producto con ese SKU",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/realtime/ticket": {
+      "post": {
+        "tags": [
+          "Tiempo real"
+        ],
+        "summary": "Entrega un ticket de un solo uso para abrir el WebSocket",
+        "description": "El navegador no puede enviar `Authorization` al abrir un WebSocket y el access token no debe ir en la URL. Por eso se pide aquí (autenticado) un ticket aleatorio que vence en 30 s y sirve una sola vez. Con él se abre `wss://<mismo origen>/api/realtime?ticket=...`; sin ticket válido (ausente, vencido o ya usado) el servidor rechaza el handshake con 401. Por el WebSocket llegan mensajes JSON `{ type, payload }`: `transfer.updated` (`{ transferId, status, originWarehouseId, destinationWarehouseId }`) y `stock.changed` (`{ warehouseId, productIds }`), sin costos. ADMIN y AUDITOR reciben todos; el jefe de bodega y el operario, solo los de sus bodegas asignadas. Los eventos salen después de confirmar la transacción. El servidor hace ping cada 30 s y cierra las conexiones muertas.\n",
+        "responses": {
+          "201": {
+            "description": "Ticket emitido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealtimeTicket"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/in-transit": {
+      "get": {
+        "tags": [
+          "Reportes"
+        ],
+        "summary": "Traspasos en tránsito, con días en tránsito y valor al costo congelado",
+        "description": "Traspasos IN_TRANSIT donde la bodega es origen o destino (sin bodega, todas las visibles), del despacho más antiguo al más nuevo. Mismos permisos que los demás reportes.\n",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "warehouseId",
+            "description": "Bodega de origen o de destino; sin ella, todas las visibles",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Traspasos y totales",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InTransitReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "OPERATOR, o la bodega no está asignada al jefe de bodega",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/kardex": {
+      "get": {
+        "tags": [
+          "Reportes"
+        ],
+        "summary": "Kardex valorizado de un producto en una bodega",
+        "description": "Movimientos del libro en orden cronológico, cada uno con su entrada, salida, saldo, costo unitario, CPP resultante y valor del saldo. Sale tal cual del libro (no se recalcula nada). La merma en tránsito no es entrada ni salida: el saldo no cambia y la cantidad perdida va en `quantity`. Paginación por cursor: la primera página sin `cursor` y las siguientes con el `nextCursor` de la anterior. ADMIN y AUDITOR, cualquier bodega; WAREHOUSE_MANAGER, solo las asignadas; el OPERATOR no tiene acceso (son datos de costo).\n",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "warehouseId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "productId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "description": "El `nextCursor` de la página anterior",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página del kardex con los datos de la bodega y del producto",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KardexPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falta la bodega o el producto, o un parámetro o el cursor son inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "OPERATOR, o la bodega no está asignada al jefe de bodega",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La bodega o el producto no existen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/kardex/export": {
+      "get": {
+        "tags": [
+          "Reportes"
+        ],
+        "summary": "Exporta el kardex completo a CSV o PDF",
+        "description": "Mismo contenido y permisos que el kardex, sin paginar. El CSV va en UTF-8 con BOM (Excel muestra bien las tildes) y neutraliza los textos que empiezan como fórmula; el PDF se genera en el servidor por streaming.\n",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "warehouseId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "productId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "csv",
+                "pdf"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archivo para descargar (Content-Disposition attachment)",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Faltan parámetros o el formato no es csv ni pdf",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "OPERATOR, o la bodega no está asignada al jefe de bodega",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La bodega o el producto no existen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/shrinkage": {
+      "get": {
+        "tags": [
+          "Reportes"
+        ],
+        "summary": "Reporte de mermas (de bodega y en tránsito) con cantidades y valores",
+        "description": "Agrupado por bodega, producto, tipo y motivo. El motivo de una merma de bodega es su código (sin la nota); la merma en tránsito no se agrupa por motivo y figura en la bodega de destino. El valor es cantidad × costo con que se registró cada merma; los totales se suman con decimales exactos. ADMIN y AUDITOR, todas las bodegas; WAREHOUSE_MANAGER, las suyas.\n",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "warehouseId",
+            "description": "Sin bodega, todas las visibles para el usuario",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "description": "Fecha inicial (AAAA-MM-DD, inclusive, hora de Colombia)",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "description": "Fecha final (AAAA-MM-DD, inclusive, hora de Colombia)",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filas y totales",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShrinkageReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos o la fecha inicial es posterior a la final",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "OPERATOR, o la bodega no está asignada al jefe de bodega",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/shrinkage/export": {
+      "get": {
+        "tags": [
+          "Reportes"
+        ],
+        "summary": "Exporta el reporte de mermas a CSV o PDF (con la fila de totales)",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "warehouseId",
+            "description": "Sin bodega, todas las visibles para el usuario",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "description": "Fecha inicial (AAAA-MM-DD, inclusive, hora de Colombia)",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "description": "Fecha final (AAAA-MM-DD, inclusive, hora de Colombia)",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "csv",
+                "pdf"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archivo para descargar (Content-Disposition attachment)",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos o el formato no es csv ni pdf",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "OPERATOR, o la bodega no está asignada al jefe de bodega",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/summary": {
+      "get": {
+        "tags": [
+          "Reportes"
+        ],
+        "summary": "Totales del dashboard",
+        "description": "Valor del inventario por bodega activa (cantidad × costo promedio), traspasos por estado, mermas de los últimos 30 días (de bodega y en tránsito) y valor de la mercancía en tránsito al costo congelado. ADMIN y AUDITOR ven todas las bodegas; el jefe de bodega, solo las suyas (los traspasos cuentan si su bodega es origen o destino). Valores como texto con 4 decimales.\n",
+        "responses": {
+          "200": {
+            "description": "Resumen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "OPERATOR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stock": {
+      "get": {
+        "tags": [
+          "Stock"
+        ],
+        "summary": "Existencias de una bodega (cantidad, costo promedio y valor total por producto)",
+        "description": "ADMIN y AUDITOR consultan cualquier bodega; WAREHOUSE_MANAGER y OPERATOR, solo las asignadas. El OPERATOR no recibe los campos de costo (`avgCost`, `totalValue`).",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "warehouseId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de niveles de stock, ordenados por SKU",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockLevelPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falta la bodega, o un parámetro o el cursor son inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "La bodega no está entre las asignadas al usuario (ADMIN y AUDITOR consultan cualquiera)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La bodega no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stock/entries": {
+      "post": {
+        "tags": [
+          "Stock"
+        ],
+        "summary": "Registra una entrada de stock y recalcula el costo promedio ponderado (CPP)",
+        "description": "En una sola transacción bloquea el nivel de stock de la bodega y el producto, recalcula el CPP, actualiza el nivel y agrega el movimiento al libro. Los costos viajan como string.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockEntryInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Entrada registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockEntryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos (cantidad, costo o identificadores)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Solo el ADMIN (cualquier bodega) y el WAREHOUSE_MANAGER (sus bodegas asignadas) registran entradas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El producto o la bodega no existen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stock/movements": {
+      "get": {
+        "tags": [
+          "Stock"
+        ],
+        "summary": "Historial de movimientos de una bodega, con el saldo y el costo después de cada uno",
+        "description": "Mismo alcance que las existencias. El OPERATOR no recibe los campos de costo (`unitCost`, `balanceAvgCost`). Paginación por cursor (keyset sobre el id del movimiento): la primera página va sin `cursor` y las siguientes con el `nextCursor` de la anterior. Los movimientos que entran mientras se recorre no hacen repetir ni saltar filas.\n",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "warehouseId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "productId",
+            "description": "Filtra los movimientos de un producto",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "description": "Filtra por tipo de movimiento",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ENTRY",
+                "TRANSFER_OUT",
+                "TRANSFER_IN",
+                "SHRINKAGE",
+                "TRANSIT_SHRINKAGE",
+                "ADJUSTMENT_IN"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "description": "El `nextCursor` de la página anterior",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Movimientos del más nuevo al más antiguo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockMovementPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falta la bodega o los parámetros son inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "La bodega no está entre las asignadas al usuario (ADMIN y AUDITOR consultan cualquiera)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La bodega o el producto no existen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stock/shrinkage": {
+      "post": {
+        "tags": [
+          "Stock"
+        ],
+        "summary": "Registra una merma de bodega (daño, vencimiento, robo o ajuste de conteo)",
+        "description": "Descuenta stock al costo promedio vigente y deja un movimiento `SHRINKAGE` en el libro. No cambia el CPP y no puede dejar el stock negativo. Todo ocurre en una transacción con el nivel de stock bloqueado. El motivo queda en `reason` del movimiento (el código y, si hay nota, \"CÓDIGO: nota\"). WAREHOUSE_MANAGER y OPERATOR, solo en sus bodegas asignadas; el OPERATOR no recibe campos de costo en la respuesta.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockShrinkageInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Merma registrada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockEntryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos (cantidad, motivo o identificadores)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Solo el WAREHOUSE_MANAGER y el OPERATOR, y únicamente en sus bodegas asignadas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El producto no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Stock insuficiente (`INSUFFICIENT_STOCK`); no se cambia nada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transfers": {
+      "post": {
+        "tags": [
+          "Traspasos"
+        ],
+        "summary": "Crea un traspaso en borrador entre dos bodegas",
+        "description": "WAREHOUSE_MANAGER y OPERATOR con la bodega de origen asignada. El origen y el destino deben ser distintos, los productos no se repiten y las cantidades son enteros mayores que 0. El borrador no mueve stock. El OPERATOR no recibe costos en la respuesta.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Traspaso creado en DRAFT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos (origen igual al destino, producto repetido, cantidad 0...)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol no permitido o la bodega de origen no está asignada al usuario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La bodega de destino o un producto no existen",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "La bodega de origen o la de destino está inactiva",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Traspasos"
+        ],
+        "summary": "Lista los traspasos visibles para el usuario",
+        "description": "ADMIN y AUDITOR ven todos; el resto, los que tienen una bodega suya como origen o destino.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "IN_TRANSIT",
+                "RECEIVED",
+                "DISCREPANCY",
+                "RESOLVED",
+                "CANCELLED"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "warehouseId",
+            "description": "Traspasos donde la bodega es origen o destino",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de traspasos, del más nuevo al más antiguo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transfers/{id}": {
+      "get": {
+        "tags": [
+          "Traspasos"
+        ],
+        "summary": "Detalle de un traspaso con sus ítems y su línea de eventos",
+        "description": "El OPERATOR no recibe `unitCost` en los ítems.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Traspaso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Ninguna bodega del traspaso está asignada al usuario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El traspaso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transfers/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Traspasos"
+        ],
+        "summary": "Cancela un traspaso en borrador",
+        "description": "WAREHOUSE_MANAGER con la bodega de origen asignada; el OPERATOR solo si creó el traspaso. Solo se cancela desde DRAFT; en otro estado responde 409 INVALID_TRANSITION.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferCancelInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Traspaso en CANCELLED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol no permitido, bodega de origen no asignada u operario que no creó el traspaso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El traspaso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "INVALID_TRANSITION, el traspaso ya no está en borrador",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transfers/{id}/dispatch": {
+      "post": {
+        "tags": [
+          "Traspasos"
+        ],
+        "summary": "Despacha un traspaso (pasa a IN_TRANSIT)",
+        "description": "Solo el WAREHOUSE_MANAGER de la bodega de origen. En una transacción descuenta el stock del origen, escribe un TRANSFER_OUT por ítem valorado al costo promedio vigente y congela ese costo en el ítem. El costo promedio del origen no cambia. Repetir el despacho responde 409.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Traspaso en IN_TRANSIT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Solo el jefe de la bodega de origen despacha",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El traspaso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "INVALID_TRANSITION (ya despachado o cancelado) o INSUFFICIENT_STOCK (sin cambios)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transfers/{id}/receive": {
+      "post": {
+        "tags": [
+          "Traspasos"
+        ],
+        "summary": "Recibe un traspaso en tránsito (pasa a RECEIVED o DISCREPANCY)",
+        "description": "WAREHOUSE_MANAGER u OPERATOR con la bodega de destino asignada. Hay que declarar la cantidad recibida de todos los ítems, sin repetir ni agregar otros. Por ítem entra al destino `min(recibido, enviado)` como TRANSFER_IN al costo congelado, con recálculo del CPP del destino. Si todo coincide el traspaso queda en RECEIVED; si algo difiere, en DISCREPANCY y la diferencia queda retenida (no toca stock ni CPP) hasta resolverla. Repetir la recepción responde 409. El OPERATOR no recibe costos en la respuesta.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferReceiveInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Traspaso en RECEIVED o DISCREPANCY",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falta algún ítem, hay uno repetido o ajeno al traspaso, o una cantidad inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol no permitido (ADMIN y AUDITOR no reciben) o la bodega de destino no está asignada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El traspaso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "INVALID_TRANSITION, el traspaso no está en tránsito (por ejemplo, ya se recibió)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/transfers/{id}/resolve": {
+      "post": {
+        "tags": [
+          "Traspasos"
+        ],
+        "summary": "Resuelve la discrepancia de un traspaso (pasa a RESOLVED)",
+        "description": "ADMIN, o WAREHOUSE_MANAGER con la bodega de origen o de destino asignada. El motivo es obligatorio. Quien recibió el traspaso no puede resolverlo (separación de funciones). En una transacción, cada faltante se registra como TRANSIT_SHRINKAGE (no mueve el stock de ninguna bodega) y cada sobrante entra al destino como ADJUSTMENT_IN con recálculo del CPP, ambos al costo congelado y con el motivo y el usuario. La diferencia no vuelve sola al origen.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferResolveInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Traspaso en RESOLVED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Falta el motivo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Rol no permitido, sin bodega del traspaso asignada, o quien resuelve fue quien recibió",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El traspaso no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "INVALID_TRANSITION, el traspaso no está en DISCREPANCY",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users": {
+      "get": {
+        "tags": [
+          "Usuarios"
+        ],
+        "summary": "Lista los usuarios (solo ADMIN; paginada, ordenada por correo)",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de usuarios, con sus bodegas asignadas (nunca el hash de la contraseña)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUserPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros de paginación inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Solo el ADMIN gestiona usuarios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Usuarios"
+        ],
+        "summary": "Crea un usuario con rol y contraseña inicial (solo ADMIN)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Usuario creado (sin bodegas asignadas)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos (correo, rol o contraseña)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Solo el ADMIN gestiona usuarios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya existe un usuario con ese correo (sin distinguir mayúsculas)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{id}": {
+      "put": {
+        "tags": [
+          "Usuarios"
+        ],
+        "summary": "Edita un usuario, lo activa o lo desactiva (solo ADMIN)",
+        "description": "Reemplaza correo, nombre, rol y estado. La contraseña solo cambia si se envía. Un usuario desactivado no puede iniciar sesión ni renovar la sesión.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Usuario actualizado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ManagedUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos o identificador inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Solo el ADMIN gestiona usuarios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El usuario no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya existe otro usuario con ese correo",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{id}/warehouses": {
+      "put": {
+        "tags": [
+          "Usuarios"
+        ],
+        "summary": "Asigna bodegas a un usuario (reemplaza la lista; solo ADMIN)",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserWarehousesInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bodegas asignadas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserWarehouses"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos o identificador inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Solo el ADMIN gestiona usuarios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "El usuario o alguna de las bodegas no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/warehouses": {
+      "get": {
+        "tags": [
+          "Bodegas"
+        ],
+        "summary": "Lista las bodegas (paginada, ordenadas por código)",
+        "description": "ADMIN y AUDITOR ven todas; WAREHOUSE_MANAGER y OPERATOR, solo las asignadas.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de bodegas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WarehousePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Parámetros de paginación inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Bodegas"
+        ],
+        "summary": "Crea una bodega (solo ADMIN)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WarehouseInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Bodega creada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Warehouse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Solo el ADMIN crea bodegas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya existe una bodega con ese código",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/warehouses/destinations": {
+      "get": {
+        "tags": [
+          "Bodegas"
+        ],
+        "summary": "Bodegas activas que se pueden elegir como destino de un traspaso",
+        "description": "Cualquier usuario autenticado recibe todas las bodegas activas (id, código y nombre), no solo las asignadas: quien crea un traspaso necesita elegir una bodega de otra persona como destino. Sin paginación, ordenadas por código.\n",
+        "responses": {
+          "200": {
+            "description": "Bodegas activas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WarehouseDestinationList"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/warehouses/{id}": {
+      "put": {
+        "tags": [
+          "Bodegas"
+        ],
+        "summary": "Edita una bodega (solo ADMIN; reemplaza código, nombre y estado activo)",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WarehouseInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bodega actualizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Warehouse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Datos o identificador inválidos",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Token ausente, inválido o expirado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Solo el ADMIN edita bodegas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "La bodega no existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Ya existe otra bodega con ese código",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "tags": []
+}
