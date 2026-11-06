@@ -30,6 +30,25 @@ export function buildOpenApiSpec(): object {
               password: { type: 'string', example: 'tu-contraseña' },
             },
           },
+          Session: {
+            type: 'object',
+            required: ['id', 'userAgent', 'createdAt', 'lastUsedAt', 'current'],
+            properties: {
+              id: { type: 'string', format: 'uuid', description: 'Familia de refresh tokens' },
+              userAgent: { type: 'string', nullable: true },
+              createdAt: { type: 'string', format: 'date-time' },
+              lastUsedAt: { type: 'string', format: 'date-time', nullable: true },
+              current: { type: 'boolean', description: 'Es la sesión de esta cookie' },
+            },
+          },
+          PasswordChangeInput: {
+            type: 'object',
+            required: ['currentPassword', 'newPassword'],
+            properties: {
+              currentPassword: { type: 'string' },
+              newPassword: { type: 'string', minLength: 12, maxLength: 128 },
+            },
+          },
           User: {
             type: 'object',
             required: ['id', 'name', 'email', 'role'],

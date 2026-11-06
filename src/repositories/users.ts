@@ -49,6 +49,8 @@ export interface UsersRepository {
   insert(user: NewUser & { active: boolean }): Promise<ManagedUser>;
   /** Reemplaza los datos del usuario. Devuelve null si el id no existe. */
   update(id: string, changes: UserChanges): Promise<ManagedUser | null>;
+  /** Cambia solo el hash de la contraseña (cambio de la propia contraseña). */
+  updatePasswordHash(id: string, passwordHash: string): Promise<void>;
   /** Reemplaza las bodegas asignadas en una sola instrucción. Una bodega inexistente lanza NotFoundError. */
   replaceWarehouses(userId: string, warehouseIds: string[]): Promise<void>;
   /** Ids de las bodegas asignadas al usuario. */
@@ -182,6 +184,10 @@ export function createUsersRepository(db: Pool | PoolClient): UsersRepository {
       } catch (err) {
         throw hasCode(err, UNIQUE_VIOLATION) ? duplicateEmail() : err;
       }
+    },
+
+    async updatePasswordHash(id, passwordHash) {
+      await db.query('UPDATE users SET password_hash = $2 WHERE id = $1', [id, passwordHash]);
     },
 
     // Una sola instrucción (atómica): quita las que sobran e inserta las que faltan

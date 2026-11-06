@@ -29,6 +29,11 @@ const hasher: PasswordHasher = {
   verify: vi.fn(async () => true),
 };
 
+/** Doble del servicio de sesiones: solo registra a quién se le cerraron. */
+function noSessions() {
+  return { revokeAll: vi.fn(async () => undefined) };
+}
+
 function fakeStore(overrides: Partial<UserManagementStore> = {}): UserManagementStore {
   return {
     list: vi.fn(async () => ({ rows: [user], total: 41 })),
@@ -43,10 +48,11 @@ function fakeStore(overrides: Partial<UserManagementStore> = {}): UserManagement
 describe('UserManagementService', () => {
   it('list calcula el desplazamiento y devuelve el formato de lista', async () => {
     const store = fakeStore();
-    const result = await createUserManagementService({ users: store, hasher }).list(
-      { page: 3, pageSize: 20 },
-      ADMIN_ACTOR,
-    );
+    const result = await createUserManagementService({
+      users: store,
+      hasher,
+      sessions: noSessions(),
+    }).list({ page: 3, pageSize: 20 }, ADMIN_ACTOR);
 
     expect(store.list).toHaveBeenCalledWith(20, 40);
     expect(result).toEqual({ data: [user], page: 3, pageSize: 20, total: 41 });
@@ -54,7 +60,7 @@ describe('UserManagementService', () => {
 
   it('create guarda el hash de la contraseña, nunca la contraseña', async () => {
     const store = fakeStore();
-    await createUserManagementService({ users: store, hasher }).create(
+    await createUserManagementService({ users: store, hasher, sessions: noSessions() }).create(
       {
         email: 'a@b.co',
         name: 'A',
@@ -76,7 +82,7 @@ describe('UserManagementService', () => {
 
   it('update sin contraseña no envía hash; con contraseña lo envía', async () => {
     const store = fakeStore();
-    const service = createUserManagementService({ users: store, hasher });
+    const service = createUserManagementService({ users: store, hasher, sessions: noSessions() });
     const base = { email: 'a@b.co', name: 'A', role: 'OPERATOR', active: true } as const;
 
     await service.update('u-1', base, ADMIN_ACTOR);
@@ -89,10 +95,48 @@ describe('UserManagementService', () => {
     });
   });
 
+  it('cambiar la contraseña o desactivar cierra las sesiones del usuario; editar otra cosa no', async () => {
+    const sessions = noSessions();
+    const inactive = { ...user, active: false };
+    const store = fakeStore({
+      update: vi.fn(async (_id, changes) => (changes.active ? user : inactive)),
+    });
+    const service = createUserManagementService({ users: store, hasher, sessions });
+    const base = { email: 'a@b.co', name: 'A', role: 'OPERATOR', active: true } as const;
+
+    await service.update('u-1', base, ADMIN_ACTOR);
+    expect(sessions.revokeAll).not.toHaveBeenCalled();
+
+    await service.update('u-1', { ...base, password: 'Clave-segura-123' }, ADMIN_ACTOR);
+    expect(sessions.revokeAll).toHaveBeenCalledTimes(1);
+
+    await service.update('u-1', { ...base, active: false }, ADMIN_ACTOR);
+    expect(sessions.revokeAll).toHaveBeenCalledTimes(2);
+    expect(sessions.revokeAll).toHaveBeenLastCalledWith('u-1');
+  });
+
+  it('si el usuario no existe no cierra sesiones de nadie', async () => {
+    const sessions = noSessions();
+    const service = createUserManagementService({
+      users: fakeStore({ update: async () => null }),
+      hasher,
+      sessions,
+    });
+    await expect(
+      service.update(
+        'x',
+        { email: 'a@b.co', name: 'A', role: 'OPERATOR', active: false },
+        ADMIN_ACTOR,
+      ),
+    ).rejects.toThrow(NotFoundError);
+    expect(sessions.revokeAll).not.toHaveBeenCalled();
+  });
+
   it('update de un usuario inexistente lanza NotFoundError', async () => {
     const service = createUserManagementService({
       users: fakeStore({ update: async () => null }),
       hasher,
+      sessions: noSessions(),
     });
     await expect(
       service.update(
@@ -105,11 +149,11 @@ describe('UserManagementService', () => {
 
   it('setWarehouses reemplaza las bodegas y devuelve la lista ordenada', async () => {
     const store = fakeStore();
-    const result = await createUserManagementService({ users: store, hasher }).setWarehouses(
-      'u-1',
-      ['b', 'a'],
-      ADMIN_ACTOR,
-    );
+    const result = await createUserManagementService({
+      users: store,
+      hasher,
+      sessions: noSessions(),
+    }).setWarehouses('u-1', ['b', 'a'], ADMIN_ACTOR);
 
     expect(store.replaceWarehouses).toHaveBeenCalledWith('u-1', ['b', 'a']);
     expect(result).toEqual({ userId: 'u-1', warehouseIds: ['a', 'b'] });
@@ -118,7 +162,11 @@ describe('UserManagementService', () => {
   it('setWarehouses de un usuario inexistente lanza NotFoundError sin tocar las asignaciones', async () => {
     const store = fakeStore({ findManagedById: async () => null });
     await expect(
-      createUserManagementService({ users: store, hasher }).setWarehouses('x', [], ADMIN_ACTOR),
+      createUserManagementService({ users: store, hasher, sessions: noSessions() }).setWarehouses(
+        'x',
+        [],
+        ADMIN_ACTOR,
+      ),
     ).rejects.toThrow(NotFoundError);
     expect(store.replaceWarehouses).not.toHaveBeenCalled();
   });

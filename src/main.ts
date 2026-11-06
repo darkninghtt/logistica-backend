@@ -100,6 +100,7 @@ function main(): void {
   const userManagementService = createUserManagementService({
     users: usersRepository,
     hasher: createArgon2Hasher(),
+    sessions,
   });
   const app = createApp({
     logger,
