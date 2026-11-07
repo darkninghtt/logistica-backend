@@ -302,13 +302,13 @@ El backend sirve el build del frontend (`public/`) y la API bajo `/api`, todo de
 
 **Variables de entorno en Render** (nunca en el repositorio):
 
-| Variable       | Valor                                                                                     |
-| -------------- | ----------------------------------------------------------------------------------------- |
-| `NODE_ENV`     | `production`                                                                              |
-| `DATABASE_URL` | Cadena de conexión de Neon (con `sslmode=require`)                                        |
-| `JWT_SECRET`   | Secreto propio de producción, 32 caracteres o más (por ejemplo `openssl rand -base64 48`) |
-| `TRUST_PROXY`  | `1` (Render pone un proxy delante)                                                        |
-| `PORT`         | Lo define Render; no hace falta ponerlo                                                   |
+| Variable       | Valor                                                                                                                                     |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`     | `production`                                                                                                                              |
+| `DATABASE_URL` | Cadena de conexión de Neon (con `sslmode=require`)                                                                                        |
+| `JWT_SECRET`   | Secreto propio de producción, 32 caracteres o más (por ejemplo `openssl rand -base64 48`)                                                 |
+| `TRUST_PROXY`  | `3`: delante de la app hay Cloudflare, el borde y el balanceador de Render; así el límite de peticiones cuenta por la IP real del cliente |
+| `PORT`         | Lo define Render; no hace falta ponerlo                                                                                                   |
 
 **Pasos (la primera vez)**
 
