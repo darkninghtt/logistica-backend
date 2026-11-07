@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import type { Express } from 'express';
 import request from 'supertest';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../src/app';
@@ -187,6 +188,48 @@ describe('rate limiting', () => {
       message: 'Demasiadas peticiones, intenta de nuevo más tarde',
       correlationId: 'rl-1',
     });
+  });
+
+  /*
+   * En Render la petición llega con `x-forwarded-for: <cliente>, <Cloudflare>, <borde de Render>`
+   * y la conexión la abre el balanceador interno: hay tres saltos de proxy delante de la app.
+   * Los saltos intermedios cambian de una petición a otra; el cliente no.
+   */
+  const loginThroughRender = (app: Express, forwardedFor: string) =>
+    request(app)
+      .post('/api/auth/login')
+      .set('x-forwarded-for', forwardedFor)
+      .send({ email: ADMIN.email, password: 'incorrecta' });
+
+  it('con TRUST_PROXY=3 (Render) cuenta por la IP del cliente aunque cambien los proxies', async () => {
+    const limited = createApp({ ...base.deps, rateLimits: limits, trustProxy: 3 });
+    const attempt = (i: number) =>
+      loginThroughRender(limited, `191.92.0.1, 162.159.0.${i}, 10.25.0.${i}`);
+
+    for (let i = 0; i < 3; i++) expect((await attempt(i)).status).toBe(401);
+    expect((await attempt(3)).status).toBe(429);
+    // Otro cliente detrás de los mismos proxies tiene su propio contador
+    expect((await loginThroughRender(limited, '191.92.0.2, 162.159.0.1, 10.25.0.1')).status).toBe(
+      401,
+    );
+  });
+
+  it('con TRUST_PROXY=3 un x-forwarded-for inventado por el cliente no esquiva el límite', async () => {
+    const limited = createApp({ ...base.deps, rateLimits: limits, trustProxy: 3 });
+    // Cloudflare agrega la IP real después de lo que mande el cliente
+    const attempt = (i: number) =>
+      loginThroughRender(limited, `6.6.6.${i}, 191.92.0.3, 162.159.0.${i}, 10.25.0.${i}`);
+
+    for (let i = 0; i < 3; i++) expect((await attempt(i)).status).toBe(401);
+    expect((await attempt(3)).status).toBe(429);
+  });
+
+  it('con un solo salto de confianza cada proxy intermedio tendría su contador (el error que se corrigió)', async () => {
+    const limited = createApp({ ...base.deps, rateLimits: limits, trustProxy: 1 });
+    for (let i = 0; i < 5; i++) {
+      const res = await loginThroughRender(limited, `191.92.0.4, 162.159.0.${i}, 10.25.0.${i}`);
+      expect(res.status).toBe(401);
+    }
   });
 
   it('el refresh también tiene el límite estricto cuando llega con una cookie inválida', async () => {
